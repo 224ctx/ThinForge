@@ -1,0 +1,87 @@
+# ThinForge Container-Exposure-Overrides
+#
+# Diese Datei ergaenzt die aus docker-compose.yml abgeleiteten Defaults
+# fuer den VEX-Evaluator. Auto-Default-Regeln:
+#   - ports:[...] oder network_mode:host → network=lan
+#   - network_mode:none → network=none
+#   - sonst → network=docker-internal
+#   - privileged/profiles werden direkt aus compose uebernommen
+#
+# Overrides hier setzen, wenn die compose-Heuristik nicht der tatsaechlichen
+# Erreichbarkeit entspricht (z.B. cloner hat ports definiert, nimmt aber
+# keine eingehenden Verbindungen an).
+#
+# Siehe docs/superpowers/specs/2026-04-21-cve-exposure-filter-design.md
+
+services:
+  cloner:
+    # Technisch im LAN-Netz, aber nur Outbound. Nimmt keine eingehenden
+    # Verbindungen an. QEMU/OVMF-CVEs betreffen nur Guest-VMs die wir selbst
+    # booten — kein Untrusted-Guest-Workflow.
+    network: none
+    guest_escape_only: true
+    notes: "Clone-Capture-Workflow, keine Listener, nur eigene Guests"
+
+  cloning-vm:
+    # noVNC/Redis-Proxy ist nur intern erreichbar (ueber Caddy reverse-proxy,
+    # nicht direkt), QEMU-Guest-Pfad analog zu cloner.
+    network: docker-internal
+    guest_escape_only: true
+    notes: "Browser-VM-Konsole via Caddy, QEMU-Guests sind getrusted"
+
+  bt-seeder:
+    # Technisch im LAN-Netz, aber explizit nur auf die Client-Netz-IP
+    # gebunden — nicht auf Management-Netz erreichbar.
+    # Setup-Wizard trennt client_network von management_network; die
+    # Bindung erfolgt auf pxe_server_ip() = dhcp_config.rollout_ip via:
+    #   - opentracker  -i $SERVER_IP   (entrypoint.sh)
+    #   - libtorrent   LISTEN_INTERFACES=<server_ip>:<seed_port>  (env)
+    network: lan
+    notes: "BitTorrent-Port nur auf Client-Netz-IP, nicht auf Mgmt-Netz"
+
+  multicast-sender:
+    # network_mode: host, aber kein Listening-Socket. udp-sender bindet
+    # nur als Egress an --interface $INTERFACE (aus dhcp_config.interface,
+    # Setup-Wizard-Client-NIC). Pakete gehen ausschliesslich auf der
+    # Client-NIC raus, Mgmt-Netz sieht sie nicht.
+    network: lan
+    notes: "Reiner UDP-Sender, --interface-bound, kein Listener"
+
+  caddy:
+    # Front-Tür. host-net, bindet zusätzlich vpn_ip:443 (NetBird-Overlay).
+    # Auf der VPN-Seite proxyt Caddy nur die Agent-Allowlist (render_vpn_api_block),
+    # keine UI/Admin-API. mgmt_ip:443 = UI + volle API, rollout_ip = Client-LAN.
+    network: external
+    notes: "vpn_ip:443 = Agent-Allowlist, mgmt_ip:443 = UI+API; VPN-segmentiert"
+
+  backend:
+    # Loopback-gebunden (127.0.0.1:8000), via Caddy vpn_ip:443 nur für die
+    # Agent-Allowlist von Remote-Peers erreichbar (Admin-API/UI dort 404).
+    network: external
+    notes: "Nur Agent-Allowlist über Overlay erreichbar (Caddy-segmentiert)"
+
+  netbird:
+    # host-net, ThinVPN/NetBird-Overlay-Agent (wt0). Ausgehender Client zum
+    # ThinVPN-Server, kein Inbound-Listener.
+    network: external
+    notes: "Overlay-Agent (wt0); outbound zum ThinVPN-Server, kein Inbound"
+
+  dnsmasq:
+    # Split-DNS für VPN-Clients (NetBird-Nameserver-Group).
+    network: external
+    notes: "DNS für Remote-VPN-Peers über Overlay"
+
+  chrony:
+    # NTP für VPN-Clients.
+    network: external
+    notes: "NTP für Remote-VPN-Peers über Overlay"
+
+  # Alle anderen Services nutzen compose-Defaults:
+  #   worker                   → docker-internal (keine ports)
+  #   postgres, redis          → docker-internal (keine ports)
+  #   frontend                 → lan (127.0.0.1:3000-ports); Admin-UI nur mgmt-seitig
+  #   guacd, semaphore         → compose-default (mgmt-only, NICHT external)
+  #   nfs-server, multicast-sender, bt-seeder → lan
+  #                              (Client-LAN-Imaging/PXE, nicht über das Overlay)
+  # External (über NetBird-Overlay erreichbar) = caddy, backend, netbird,
+  #   dnsmasq, chrony — siehe Overrides oben.

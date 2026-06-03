@@ -1,0 +1,6 @@
+.env
+ThinForgeDaten/
+frontend/node_modules/
+frontend/dist/
+buildsources/
+*.log

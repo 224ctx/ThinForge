@@ -1,0 +1,14 @@
+[Unit]
+Description=ThinForge Agent (Heartbeat + Updates)
+After=network-online.target data.mount
+Wants=network-online.target
+Requires=data.mount
+
+[Service]
+Type=simple
+ExecStart=/data/thinforge/thinforge-agent
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

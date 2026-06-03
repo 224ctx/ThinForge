@@ -1,0 +1,550 @@
+# ThinForge — Registry-basiertes Compose
+#
+# Zieht die vorgebauten Container-Images aus der Gitea-Registry statt lokal
+# aus dem Source zu bauen. Spart den Rust-/Go-/Vue-Build (~10 Min) beim
+# Erst-Deploy auf neuen Hosts.
+#
+# Voraussetzungen:
+#   1. docker login git.example.com -u <user> (einmal pro Host)
+#      HTTPS auf Standardport — kein insecure-registries-Eintrag nötig.
+#   2. Das Repo ist trotzdem geklont — Volumes wie ./ansible, ./scripts,
+#      ./docker/grafana/provisioning, etc. werden weiterhin in Container
+#      gemountet. Das Image enthält nur die Runtime-Binaries.
+#
+# Verwendung:
+#   docker compose up -d
+#   docker compose --profile network up -d
+#   docker compose --profile monitoring up -d
+
+name: thinforge
+
+# Anchor für alle Bridge-Network-Services: neutralisiert die search-domain
+# aus host /etc/resolv.conf. Sonst expandiert Docker's embedded DNS jeden
+# Container-Namen ohne Punkt (`backend`, `redis`, ...) via search-domain
+# und resolved auf einen externen Wildcard-CNAME (z. B. *.example.com
+# → 203.0.113.10) STATT auf die Container-IP. Folge: Caddy → 502 backend
+# unreachable, Backend → kein Redis, etc. Setzt search auf `.` (root) →
+# Docker-DNS kann Container-Hostnamen direkt aufloesen, vollstaendig dynamisch.
+x-no-search-domain: &no-search-domain
+  dns_search:
+    - .
+
+services:
+  postgres:
+    labels:
+      com.thinforge.label: "PostgreSQL"
+      com.thinforge.icon: "mdi-database"
+      com.thinforge.critical: "true"
+    <<: *no-search-domain
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      # postgres:18-alpine setzt PGDATA default auf /var/lib/postgresql/18/docker
+      # und deklariert VOLUME /var/lib/postgresql — ein Bind auf /data läuft dann
+      # ins Leere, Daten landen in einem anonymen Volume und sind bei rebuilds
+      # verloren. Explizit auf Subordner des Bind-Mounts setzen.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/postgres:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    labels:
+      com.thinforge.label: "Redis"
+      com.thinforge.icon: "mdi-memory"
+      com.thinforge.critical: "true"
+    <<: *no-search-domain
+    image: redis:8-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    labels:
+      com.thinforge.label: "Backend (API)"
+      com.thinforge.icon: "mdi-api"
+      com.thinforge.critical: "true"
+    <<: *no-search-domain
+    image: git.example.com/thinforge/thinforge-backend:latest
+    command: ["thinforge-api"]
+    # Bind to 127.0.0.1 only — Caddy:80 reverse-proxiet /api/* fuer
+    # PXE-Clients (HTTP, kein TLS-Trust). See F-CR-06.
+    ports:
+      - "127.0.0.1:8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /data
+      TFTP_ROOT: /var/lib/tftpboot
+      SIGNING_KEY_DIR: /data/keys
+      # Persist grype's vulnerability DB (~430 MB) across container restarts.
+      # Without this, every UI-triggered scan re-downloads the DB (~8 min).
+      GRYPE_DB_CACHE_DIR: /data/grype-cache
+      MANAGEMENT_DNS: ${MANAGEMENT_DNS:-}
+      # CVE-Exposure-Filter: local = nur gebundelte Acceptance-Liste,
+      # remote = vor Scan + Panel-Mount Remote-Version pruefen.
+      THINFORGE_ACCEPTANCE_LIST_MODE: ${THINFORGE_ACCEPTANCE_LIST_MODE:-local}
+      THINFORGE_ACCEPTANCE_LIST_URL: ${THINFORGE_ACCEPTANCE_LIST_URL:-}
+      THINFORGE_KEV_URL: ${THINFORGE_KEV_URL:-}
+      # Agent-Build im Backend deaktiviert — der Kunde nutzt nur die
+      # in agent-go/bin/ ausgelieferte, vorsignierte Binary. POST /agent/build
+      # liefert dann 403, und der First-Login-Auto-Build-Trigger ist ein No-Op.
+      THINFORGE_AGENT_BUILD_ENABLED: "false"
+      DEBUG: "false"
+      # Guacamole-Daemon (Remote-Desktop, Spec 2026-05-14)
+      GUACD_HOST: guacd
+      GUACD_PORT: "4822"
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}:/data
+      - ${STORAGE_DIR:-./ThinForgeDaten}/dnsmasq:/etc/dnsmasq.d
+      - ${STORAGE_DIR:-./ThinForgeDaten}/tftp:/var/lib/tftpboot
+      - ${STORAGE_DIR:-./ThinForgeDaten}/bittorrent:/data/bittorrent
+      - ${STORAGE_DIR:-./ThinForgeDaten}/nfs-config:/data/nfs-config
+      - ./license:/app/license
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/docker-compose.yml:ro
+      # `:ro` bewusst: das Backend muss `.env` nur lesen (Subprozesse
+      # `compose --env-file /.env` in cloning/cloningvm). ENCRYPTION_KEY
+      # lebt seit der Refaktur in ${STORAGE_DIR}/.encryption_key — keine
+      # Host-File-Schreibrechte aus dem Container heraus.
+      - ./.env:/.env:ro
+      - ./ansible:/ansible:ro
+      - ./scripts:/scripts:ro
+      # Curated CVE-Acceptance-Liste — wird nach jedem UI-getriggerten Scan
+      # von thinforge-services::vulnerability_acceptance gelesen, um
+      # REPORT.json mit Verdict (PASS/INFO/WARN) zu schreiben.
+      - ./docs/security/vulnerability-acceptance.md:/docs/security/vulnerability-acceptance.md:ro
+      # Container-Exposure-Overrides fuer den VEX-Evaluator (Spec 2026-04-21).
+      - ./docs/security/container-exposure.yaml:/docs/security/container-exposure.yaml:ro
+      # Cache fuer den Remote-Version-Check der Akzeptanzliste.
+      - acceptance_cache:/app/cache
+      # Backend writes .minisig next to the agent binary during
+      # signing/generate-keypair, rotate-key and sign-existing flows.
+      - ./agent-go/bin:/app/agent-go/bin
+      # SBOM / vulnerability reports produced by
+      # thinforge_services::vulnerability_scan::run_scan (UI-triggered only,
+      # via backend). Backend both reads and writes. Host path lives under
+      # ThinForgeDaten so storage-dir overrides apply uniformly.
+      - ${STORAGE_DIR:-./ThinForgeDaten}/vulnerability-scans/grype:/app/sbom_grype
+      - ${STORAGE_DIR:-./ThinForgeDaten}/vulnerability-scans/sbom:/app/sbom
+      - /etc/hostname:/host-hostname:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  worker:
+    labels:
+      com.thinforge.label: "Worker"
+      com.thinforge.icon: "mdi-cog-outline"
+    <<: *no-search-domain
+    image: git.example.com/thinforge/thinforge-worker:latest
+    command: ["thinforge-worker"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379/0
+      STORAGE_DIR: /data
+      SIGNING_KEY_DIR: /data/keys
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}:/data
+      - ${STORAGE_DIR:-./ThinForgeDaten}/ssh:/data/ssh
+      - ./agent-go/bin:/app/agent-go/bin:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/docker-compose.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/worker-alive -mmin -1 2>/dev/null | grep -q . || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  frontend:
+    labels:
+      com.thinforge.label: "Frontend (Vue)"
+      com.thinforge.icon: "mdi-web"
+    <<: *no-search-domain
+    image: git.example.com/thinforge/thinforge-frontend:latest
+    restart: unless-stopped
+    volumes:
+      - ./docs/CHANGELOG.md:/docs/CHANGELOG.md:ro
+    ports:
+      # Bind to 127.0.0.1 only — Caddy reverse-proxies frontend on :443.
+      # See docs/security-audit-2026-04-18.md F-CR-06.
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  caddy:
+    labels:
+      com.thinforge.label: "Caddy (Proxy)"
+      com.thinforge.icon: "mdi-shield-outline"
+    <<: *no-search-domain
+    image: caddy:latest
+    restart: unless-stopped
+    # Reverse-Proxy fuer das Mgmt-Netz — gehoert zur Network-Gruppe im
+    # Services-Panel. Wird per `rebuild.sh`/`deploy.sh` (--profile network)
+    # gestartet; nichts depends_on caddy.
+    profiles:
+      - network
+    # Host-Networking, damit Caddy auf <rollout_ip>:80 binden kann und
+    # so das Mgmt-Netz nicht erreicht. Reverse-Proxies in der Caddyfile
+    # zeigen auf 127.0.0.1:<port>, weil backend/frontend im host-Net
+    # keine Service-DNS-Aufloesung mehr haben.
+    network_mode: host
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ${STORAGE_DIR:-./ThinForgeDaten}/caddy/conf.d:/etc/caddy/conf.d
+      - ${STORAGE_DIR:-./ThinForgeDaten}/caddy/data:/data
+      - ${STORAGE_DIR:-./ThinForgeDaten}/caddy/config:/config
+      - ${STORAGE_DIR:-./ThinForgeDaten}/caddy/certs:/etc/caddy/certs:ro
+      - ${STORAGE_DIR:-./ThinForgeDaten}/tftp:/srv/tftp:ro
+    healthcheck:
+      # Caddy antwortet auf 127.0.0.1:443 im host-mode. :80 ist nur an
+      # die Client-Netz-IP gebunden, ein generischer localhost:80-Check
+      # wuerde auf einem frischen Setup ohne rollout_ip fehlschlagen.
+      test: ["CMD", "wget", "--no-check-certificate", "-qO", "/dev/null", "https://127.0.0.1:443"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - backend
+      - frontend
+
+  guacd:
+    image: guacamole/guacd:1.6.0
+    container_name: thinforge-guacd
+    restart: unless-stopped
+    # Default compose bridge: backend reaches us by service-name DNS.
+    labels:
+      com.thinforge.label: "Guacd (Remote-Desktop)"
+      com.thinforge.icon: "mdi-remote-desktop"
+      # Explicit container_name above (no `-1` suffix) — override the
+      # parser-default so inspect/logs/start/stop find the running container.
+      com.thinforge.container_name: "thinforge-guacd"
+    # Network-Infrastructure — laeuft nur mit `--profile network`
+    # (deploy.sh/rebuild.sh setzen das Flag). backend hat bewusst KEIN
+    # depends_on: guacd mehr (2026-05-22 entkoppelt) — Guacamole-Sessions
+    # sind optional und sollen den Core-Start nicht blockieren.
+    # Profile dient ausserdem der UI-Gruppierung im Services-Panel.
+    profiles:
+      - network
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/guacd-recordings:/recordings:rw
+    environment:
+      GUACD_LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "4822"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  dnsmasq:
+    labels:
+      com.thinforge.label: "dnsmasq (DHCP/PXE)"
+      com.thinforge.icon: "mdi-lan"
+    image: git.example.com/thinforge/thinforge-dnsmasq:latest
+    restart: unless-stopped
+    profiles:
+      - network
+    cap_add:
+      - NET_ADMIN
+    network_mode: host
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/dnsmasq:/etc/dnsmasq.d
+      - ${STORAGE_DIR:-./ThinForgeDaten}/tftp:/var/lib/tftpboot
+    environment:
+      THINFORGE_BACKEND: http://127.0.0.1:8000
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 $(cat /var/run/dnsmasq/dnsmasq.pid 2>/dev/null) 2>/dev/null || kill -0 $(pidof dnsmasq) 2>/dev/null"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - backend
+
+  netbird:
+    labels:
+      com.thinforge.service: "thinvpn"
+      com.thinforge.label: "ThinVPN"
+      com.thinforge.icon: "mdi-vpn"
+    # Offizielles Upstream-Image (docker compose pull = neueste Version).
+    image: netbirdio/netbird:latest
+    # Entrypoint-Override → idle Daemon; Backend enrollt per exec
+    # (netbird_service::bootstrap_server_peer).
+    entrypoint: ["netbird"]
+    command: ["service", "run"]
+    restart: unless-stopped
+    profiles:
+      - network
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+    devices:
+      - /dev/net/tun
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/netbird-config:/var/lib/netbird
+    healthcheck:
+      test: ["CMD", "netbird", "status", "--check", "live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  chrony:
+    labels:
+      com.thinforge.label: "Chrony (NTP)"
+      com.thinforge.icon: "mdi-clock-outline"
+    image: git.example.com/thinforge/thinforge-chrony:latest
+    restart: unless-stopped
+    profiles:
+      - network
+    cap_add:
+      - SYS_TIME
+    network_mode: host
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/chrony:/etc/chrony/ntp.d
+    healthcheck:
+      test: ["CMD", "chronyc", "tracking"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - backend
+
+  nfs-server:
+    labels:
+      com.thinforge.label: "NFS Server"
+      com.thinforge.icon: "mdi-folder-network"
+    image: git.example.com/thinforge/thinforge-nfs-server:latest
+    restart: unless-stopped
+    profiles:
+      - network
+    privileged: true
+    network_mode: host
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/clones:/nfs/clones
+      - ${STORAGE_DIR:-./ThinForgeDaten}/captures:/nfs/captures
+      - ${STORAGE_DIR:-./ThinForgeDaten}/deltas:/nfs/deltas
+      - ${STORAGE_DIR:-./ThinForgeDaten}/nfs-config/exports:/etc/exports:ro
+    healthcheck:
+      test: ["CMD-SHELL", "rpcinfo -t localhost 100003 3 2>/dev/null || rpcinfo -p localhost 2>/dev/null | grep -q nfs"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - backend
+
+  # --- Deaktivierte Services (2026-04-20) ---
+  # prometheus, grafana, semaphore sind temporaer ausgebaut.
+  # Siehe docs/deaktivierte-features.md fuer Reaktivierung.
+  # Volume-Daten bleiben unter ThinForgeDaten/ erhalten.
+#   prometheus:
+#     <<: *no-search-domain
+#     image: prom/prometheus:v3.11.2
+#     restart: unless-stopped
+#     profiles:
+#       - monitoring
+#     command:
+#       - '--config.file=/etc/prometheus/prometheus.yml'
+#       - '--storage.tsdb.path=/prometheus'
+#       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+#       - '--web.console.templates=/usr/share/prometheus/consoles'
+#     volumes:
+#       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+#       - ${STORAGE_DIR:-./ThinForgeDaten}/prometheus:/prometheus
+#     ports:
+#       # Bind to 127.0.0.1 only — Prometheus is admin-internal, no LAN access.
+#       # See docs/security-audit-2026-04-18.md F-CR-06.
+#       - "127.0.0.1:9090:9090"
+#     healthcheck:
+#       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
+#       interval: 15s
+#       timeout: 5s
+#       retries: 3
+#     depends_on:
+#       - backend
+
+#   grafana:
+#     <<: *no-search-domain
+#     image: grafana/grafana:13.0.1
+#     restart: unless-stopped
+#     profiles:
+#       - monitoring
+#     environment:
+#       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+#       GF_USERS_ALLOW_SIGN_UP: "false"
+#       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/provisioning/dashboards/thinforge.json
+#     volumes:
+#       - ./docker/grafana/provisioning:/etc/grafana/provisioning
+#       - ${STORAGE_DIR:-./ThinForgeDaten}/grafana:/var/lib/grafana
+#     ports:
+#       # Bind to 127.0.0.1 only — Grafana is admin-internal, no LAN access.
+#       # See docs/security-audit-2026-04-18.md F-CR-06.
+#       - "127.0.0.1:3001:3000"
+#     healthcheck:
+#       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
+#       interval: 15s
+#       timeout: 5s
+#       retries: 3
+#     depends_on:
+#       - prometheus
+
+#   semaphore:
+#     <<: *no-search-domain
+#     image: git.example.com/thinforge/thinforge-semaphore:latest
+#     restart: unless-stopped
+#     ports:
+#       # Bind to 127.0.0.1 only — Semaphore is admin-internal (default-PW issue
+#       # F-HI-09); no LAN access. See docs/security-audit-2026-04-18.md F-CR-06.
+#       - "127.0.0.1:8888:3000"
+#     environment:
+#       SEMAPHORE_DB_DIALECT: sqlite
+#       SEMAPHORE_ADMIN: admin
+#       SEMAPHORE_ADMIN_PASSWORD: admin
+#       SEMAPHORE_ADMIN_NAME: Admin
+#       SEMAPHORE_ADMIN_EMAIL: admin@localhost
+#     volumes:
+#       - ${STORAGE_DIR:-./ThinForgeDaten}/semaphore/data:/var/lib/semaphore
+#       - ${STORAGE_DIR:-./ThinForgeDaten}/semaphore/config:/etc/semaphore
+#       - ${STORAGE_DIR:-./ThinForgeDaten}/semaphore/tmp:/tmp/semaphore
+#       - ${STORAGE_DIR:-./ThinForgeDaten}/semaphore/playbooks:/playbooks
+#     healthcheck:
+#       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:3000 || exit 1"]
+#       interval: 15s
+#       timeout: 5s
+#       retries: 3
+#       start_period: 10s
+#     depends_on:
+#       - backend
+
+  multicast-sender:
+    # Image-Source + UI-Metadata. Echte Sender-Container werden pro
+    # aktivem Deployment dynamisch als `thinforge-mc-sender-<dep_short>`
+    # gestartet (DYNAMIC_PATTERNS in docker_service.rs); diese tauchen
+    # zusätzlich als eigene Zeilen im Services-Panel auf. Der Template-
+    # Eintrag bleibt als idle-Platzhalter unter den On-Demand-Diensten.
+    labels:
+      com.thinforge.label: "Multicast-Sender"
+      com.thinforge.icon: "mdi-multicast"
+      com.thinforge.on_demand: "true"
+    image: git.example.com/thinforge/thinforge-multicast-sender:latest
+    profiles:
+      - multicast
+    network_mode: host
+
+  bt-seeder:
+    # Compose-Entry ist nur Image-Source + UI-Metadata. Der eigentliche
+    # Container wird vom Backend (`bittorrent_service::ensure_seeder_running`)
+    # mit festem Namen `thinforge-bt-seeder-service` gestartet — daher
+    # der explizite container_name-Override, damit das Services-Panel den
+    # laufenden Container findet (statt den unbenutzten `-1`-Default).
+    labels:
+      com.thinforge.label: "BitTorrent-Seeder"
+      com.thinforge.icon: "mdi-progress-download"
+      com.thinforge.on_demand: "true"
+      com.thinforge.container_name: "thinforge-bt-seeder-service"
+    image: git.example.com/thinforge/thinforge-bt-seeder:latest
+    profiles:
+      - bittorrent
+    network_mode: host
+
+  cloner:
+    labels:
+      com.thinforge.label: "Cloner (Clonezilla)"
+      com.thinforge.icon: "mdi-content-duplicate"
+      com.thinforge.on_demand: "true"
+    image: git.example.com/thinforge/thinforge-cloner:latest
+    profiles:
+      - cloner
+    privileged: true
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/cloning-vm:/input:ro
+      - ${STORAGE_DIR:-./ThinForgeDaten}/clones:/output
+    command: ["echo", "Use 'docker run' to execute cloning operations"]
+
+  cloning-vm:
+    labels:
+      com.thinforge.label: "Cloning-VM (QEMU)"
+      com.thinforge.icon: "mdi-desktop-classic"
+      com.thinforge.on_demand: "true"
+    image: git.example.com/thinforge/thinforge-cloning-vm:latest
+    restart: "no"
+    profiles:
+      - testing
+    privileged: true
+    network_mode: host
+    mem_limit: ${CLONING_VM_MEM_LIMIT:-2560m}
+    volumes:
+      - ${STORAGE_DIR:-./ThinForgeDaten}/cloning-vm:/var/lib/thinforge/cloning-vm
+      - ${STORAGE_DIR:-./ThinForgeDaten}/isos:/var/lib/thinforge/isos:ro
+      - ./scripts:/var/lib/thinforge/scripts:ro
+    environment:
+      - VM_RAM=${CLONING_VM_RAM:-2048}
+      - VM_CPUS=${CLONING_VM_CPUS:-2}
+      - DISK_SIZE=${CLONING_VM_DISK_SIZE:-60G}
+      - ISO_PATH=${CLONING_VM_ISO_PATH:-}
+      - KVM_ENABLED=${CLONING_VM_KVM_ENABLED:-true}
+    depends_on:
+      - backend
+
+volumes:
+  acceptance_cache:

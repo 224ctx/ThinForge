@@ -1,0 +1,9 @@
+# Lizenzierte Hersteller-VDI-Pakete NICHT ins Git (gross + EULA-gebunden).
+# Eingecheckt bleiben nur Installer, README und urls.conf.example.
+*.deb
+*.bundle
+*.rpm
+*.tar.gz
+*.tar.bz2
+*.tgz
+urls.conf

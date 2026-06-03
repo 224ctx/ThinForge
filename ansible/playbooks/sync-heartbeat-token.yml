@@ -1,0 +1,27 @@
+---
+- name: Sync Heartbeat Token to clients
+  hosts: all
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Fetch current heartbeat token from server
+      ansible.builtin.uri:
+        url: "http://backend:8000/api/v1/klon/heartbeat-token"
+        return_content: true
+      register: token_response
+      delegate_to: localhost
+      run_once: true
+
+    - name: Deploy heartbeat token
+      ansible.builtin.copy:
+        content: "{{ token_response.content }}\n"
+        dest: /data/thinforge/heartbeat.token
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Restart ThinForge Agent
+      ansible.builtin.systemd:
+        name: thinforge-agent
+        state: restarted

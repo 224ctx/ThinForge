@@ -1,0 +1,52 @@
+ThinForge
+Copyright (c) 2024-2026 Andreas Christ <info@thinforge.org>
+
+This product is composite software:
+
+  - The ThinForge proprietary components (Rust backend, Go agent,
+    TypeScript frontend, Ansible assets, and associated tooling)
+    are proprietary. See LICENSE.
+
+  - This product's container images bundle third-party binaries under
+    the GNU General Public License, Version 2 and Version 3, and
+    several permissive licenses. The directly integrated GPL v2
+    components are:
+      * Partclone       — https://partclone.org/
+      * EZIO            — https://github.com/tjjh89017/ezio
+
+    Additionally, container images install GPL v2-, GPL v3-, LGPL-,
+    and permissively-licensed packages from the Alpine Linux
+    community repositories (e.g. qemu, btrfs-progs, dnsmasq, grub,
+    parted, coreutils, bash, wget, ntfs-3g, udpcast, libtorrent-
+    rasterbar). See THIRD_PARTY_LICENSES.md for the authoritative
+    list.
+
+    Additionally, ThinForge orchestrates but does not distribute:
+      * Clonezilla Live — https://clonezilla.org/
+        (downloaded on demand at the customer site from upstream)
+      * DRBL            — https://drbl.org/
+        (referenced in source repository only; not shipped)
+
+    The proprietary components interact with these GPL components
+    exclusively through process boundaries (subprocess invocation,
+    gRPC, PXE-booted independent operating systems). No static or
+    dynamic linking against GPL-licensed code occurs in the
+    proprietary ThinForge components.
+
+For full licensing information, the texts of the GPL v2 and GPL v3,
+and a written offer for the corresponding source code of every GPL
+component (valid three years from the date of distribution), see:
+
+  LICENSE                   — ThinForge license notice (top-level)
+  THIRD_PARTY_LICENSES.md   — Summary of third-party licenses
+  LICENSES/GPL-2.0.txt      — Full GPL v2 text
+  LICENSES/GPL-3.0.txt      — Full GPL v3 text
+  LICENSES/*.md             — Per-component license metadata
+  WRITTEN_OFFER.md          — GPL v2/v3 §3(b) written source offer
+
+Corresponding source of every GPL binary that ThinForge distributes
+is shipped in this release under `sources/`:
+  sources/partclone-0.3.33.tar.gz  — Partclone source
+  sources/ezio-snapshot.tar.gz     — EZIO source
+
+SHA-256 values are pinned in sources/README.md.

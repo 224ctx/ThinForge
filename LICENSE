@@ -1,0 +1,136 @@
+ThinForge — License Notice
+===========================
+
+Copyright (c) 2024-2026 Andreas Christ. All rights reserved.
+
+ThinForge is a composite software distribution. Different components are
+subject to different licenses, as set out below. The authoritative and
+complete compliance statement is `THIRD_PARTY_LICENSES.md`; this file is
+the top-level summary.
+
+
+1. Proprietary ThinForge Components
+-----------------------------------
+
+The following components are proprietary software, copyright Andreas
+Christ, and are NOT licensed under the GNU General Public License:
+
+  * The Rust backend and all crates under `crates/`
+    (including, without limitation, `thinforge-api`, `thinforge-core`,
+    `thinforge-services`).
+  * The TypeScript / Vue frontend under `frontend/`.
+  * The Go agent under `agent-go/`.
+  * All Ansible playbooks under `ansible/` and `quellinfos/ansible-*/`,
+    except where a playbook explicitly declares a different license.
+  * All container build orchestration, shell scripts, Dockerfiles,
+    compose files, documentation, and design assets authored by
+    ThinForge, located outside `quellinfos/` and `buildsources/`.
+  * Database schemas, migrations, and configuration templates authored
+    by ThinForge.
+  * The license-issuing tooling under `LizenzTool/`.
+
+These proprietary components are licensed to the customer under a
+separate commercial End User License Agreement (EULA). No license is
+granted to these components by this file or by the presence of any
+GPL-licensed component in the same distribution.
+
+In the absence of a separate EULA, no rights are granted beyond those
+automatically conferred by the jurisdiction in which the software is
+received.
+
+
+2. Third-Party Components under the GNU General Public License
+---------------------------------------------------------------
+
+This distribution includes third-party components licensed under the
+GNU General Public License, Version 2 ("GPL v2") or Version 3
+("GPL v3"). These components remain under their respective GPL and
+nothing in the proprietary EULA of ThinForge reduces the rights the
+GPL grants you with respect to these components.
+
+Directly integrated components shipped in our container images:
+
+  * Partclone      — https://partclone.org/          (GPL v2, in images)
+  * EZIO           — https://github.com/tjjh89017/ezio (GPL v2, in images)
+
+Components orchestrated but not distributed by ThinForge the vendor:
+
+  * Clonezilla     — https://clonezilla.org/          (GPL v2; downloaded
+                     by customer at install time)
+  * DRBL           — https://drbl.org/                (GPL v2; reference
+                     only, not shipped)
+
+Additional GPL v2, GPL v3, LGPL, and permissively-licensed packages
+are installed from Alpine Linux community repositories into
+ThinForge's container images (e.g. `qemu`, `btrfs-progs`, `dnsmasq`,
+`grub`, `parted`, `coreutils`, `bash`, `wget`, `ntfs-3g`, `udpcast`,
+`libtorrent-rasterbar`). The authoritative list is maintained in
+`THIRD_PARTY_LICENSES.md`.
+
+The complete texts of GPL v2 and GPL v3 are provided in
+`LICENSES/GPL-2.0.txt` and `LICENSES/GPL-3.0.txt`. Per-component
+metadata, upstream sources, and corresponding source code locations
+are documented in `LICENSES/` and summarised in
+`THIRD_PARTY_LICENSES.md`.
+
+A written offer for the corresponding source code of every GPL v2
+component distributed in any ThinForge binary release, valid for
+three (3) years from the date of that distribution, is provided in
+`WRITTEN_OFFER.md`.
+
+
+3. Interaction Between ThinForge and GPL Components
+----------------------------------------------------
+
+The proprietary ThinForge components interact with the GPL v2
+components exclusively through process boundaries:
+
+  * as separate executables invoked as child processes (Partclone),
+  * as independent operating systems booted on separate machines
+    (Clonezilla Live, booted via PXE),
+  * as separate daemons addressed over network sockets (EZIO via
+    gRPC),
+  * and as separate processes where DRBL is used at all.
+
+The ThinForge proprietary code does not link against, statically
+combine with, or share address space with any GPL-licensed component.
+Accordingly, the proprietary ThinForge components are not "derivative
+works" of the GPL components under Section 2 of the GPL v2.
+
+
+4. No Additional Restrictions on GPL Components
+------------------------------------------------
+
+You are explicitly granted all rights with respect to the GPL v2
+components listed in Section 2 that the GPL v2 confers, including the
+rights to use, study, modify, redistribute, and sell those components,
+subject only to the terms of the GPL v2 itself. Nothing in this file
+or in any separate ThinForge EULA is intended to impose any additional
+restriction on those GPL-granted rights. To the extent any provision of
+the ThinForge EULA would conflict with the GPL v2 with respect to those
+components, the GPL v2 governs.
+
+
+5. Warranty
+-----------
+
+THIS DISTRIBUTION IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+6. Contact
+----------
+
+Andreas Christ <info@thinforge.org>
+Repository: https://git.example.com/thinforge/ThinForge
+
+
+Note: This file is a license summary intended to put recipients on
+notice of the applicable licenses. It is not itself an EULA, and it
+does not replace legal counsel. For a commercial deployment, a separate
+EULA executed between Andreas Christ and the customer is expected.

@@ -1,0 +1,25 @@
+---
+# ThinForge XFCE Desktop Configuration
+# Captured from thinforge-tcbase on 2026-04-04
+#
+# Applies XFCE settings: Theme, Panel, Window Manager, Desktop,
+# Power Manager, Screensaver, Terminal, Autostart.
+
+- name: Set user home fact
+  ansible.builtin.set_fact:
+    xfce_home: "/home/{{ xfce_user | default('thinforge') }}"
+
+- name: Ensure .config directory exists
+  ansible.builtin.file:
+    path: "{{ xfce_home }}/.config"
+    state: directory
+    owner: "{{ xfce_user | default('thinforge') }}"
+    group: "{{ xfce_user | default('thinforge') }}"
+    mode: "0755"
+
+- name: Extract XFCE configuration
+  ansible.builtin.unarchive:
+    src: xfce-config.tar.gz
+    dest: "{{ xfce_home }}/.config/"
+    owner: "{{ xfce_user | default('thinforge') }}"
+    group: "{{ xfce_user | default('thinforge') }}"

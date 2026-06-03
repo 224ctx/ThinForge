@@ -1,0 +1,20 @@
+# ThinForge — VDI-Client-Download-URLs (Vorlage)
+#
+# Nach DebianVDIClients/urls.conf kopieren und die Direkt-Links eintragen, die
+# du nach dem EULA-Klick auf der jeweiligen Hersteller-Seite erhältst. Es gibt
+# KEINE stabilen Permalinks — die Links sind versions-/sitzungsabhängig.
+# Danach:  bash install-vdi-clients-debian.sh download
+#
+# urls.conf selbst ist .gitignore't (kann interne/temporäre Links enthalten).
+
+# Citrix Workspace App (.deb)
+#CITRIX_URL="https://downloadplugins.citrix.com/ICA/.../icaclient_<version>_amd64.deb"
+
+# Parallels Client / RAS (.deb, 64-bit)
+#PARALLELS_URL="https://download.parallels.com/ras/.../parallels-client_<version>_amd64.deb"
+
+# Omnissa Horizon Client (.bundle)
+#HORIZON_URL="https://download3.omnissa.com/.../Omnissa-Horizon-Client-<version>-linux64.bundle"
+
+# Optional: Flags fuer den Horizon-Bundle-Installer (Default unten)
+#HORIZON_BUNDLE_FLAGS="--console --required --eulas-agreed"

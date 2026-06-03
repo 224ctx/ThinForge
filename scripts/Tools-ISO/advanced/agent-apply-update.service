@@ -1,0 +1,13 @@
+[Unit]
+Description=ThinForge Apply Delta Update on Shutdown
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/data/thinforge/thinforge-agent apply-update
+TimeoutStopSec=600
+
+[Install]
+WantedBy=multi-user.target

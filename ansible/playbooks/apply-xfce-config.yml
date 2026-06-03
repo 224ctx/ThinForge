@@ -1,0 +1,21 @@
+---
+# ThinForge — Apply XFCE Desktop Configuration
+#
+# Usage:
+#   ansible-playbook -i inventory playbooks/apply-xfce-config.yml
+#   ansible-playbook -i inventory playbooks/apply-xfce-config.yml --limit client-01
+#
+# Variables:
+#   xfce_user: Desktop user (default: thinforge)
+#   xfce_disable_screenlock: Disable screen lock (default: true)
+
+- name: Apply XFCE desktop configuration
+  hosts: all
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: xfce-config
+      vars:
+        xfce_user: thinforge
+        xfce_disable_screenlock: true
