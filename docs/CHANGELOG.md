@@ -12,6 +12,8 @@
 
 - **VDI-Clients (Citrix / Parallels / Omnissa Horizon) integrierbar** — Die VDI-Clients lassen sich jetzt über einen Ordner auf der Tools-ISO bereitstellen; zum Abschluss der Image-Vorbereitung wird ihre Installation optional angeboten. Wirkt bei der nächsten Image-Vorbereitung.
 
+- **Neue Funktion: VDI-Client-Pakete über die Weboberfläche hochladen** — Im Bereich Cloning gibt es einen neuen Tab „VDI-Clients", über den die Installationspakete für Citrix Workspace App, Parallels Client und Omnissa Horizon Client hochgeladen werden können. Die Pakete werden beim nächsten Start der Cloning-VM automatisch in die Tools-ISO übernommen, sodass sie bei der Image-Vorbereitung zur Verfügung stehen. Bisher mussten die Dateien manuell auf dem Server abgelegt werden — das ist vor allem bei Omnissa problematisch, weil der Download eine Anmeldung beim Hersteller erfordert. Wirkt nach Aktualisierung der Server-Dienste.
+
 ## 2026-06-02
 
 - **OS-Update nach Lizenz-Upgrade wird zuverlässig nachgeholt** — Wird ein Betriebssystem-Update (Delta) angestoßen, während ein Client noch im eingeschränkten Modus (ohne gültige Lizenz) läuft, führt er es korrekt nicht aus. Nach dem Einspielen der Lizenz (Vollausstattung) holt der Client das Update jetzt automatisch nach. Bisher konnte es vorkommen, dass das Update dauerhaft mit dem Hinweis „zu oft fehlgeschlagen" blockiert blieb, weil die erfolglosen Versuche aus der Zeit ohne Lizenz fälschlich mitgezählt wurden. Wirkt nach Aktualisierung der Client-Agenten.

@@ -28,6 +28,14 @@ auf die Tools-ISO gebaut und beim Client-Setup von hier installiert.
 | **Parallels Client (RAS)** | `*parallels*client*.deb` / `parallelsclient*.deb` | <https://www.parallels.com/products/ras/download/client/> |
 | **Omnissa Horizon Client** | `*Horizon*Client*.bundle` (oder `*horizon*client*.deb`) | <https://docs.omnissa.com/bundle/HorizonClientLinuxGuideVmulti/page/HorizonClientforLinuxGuide.html> |
 
+## Automatisierbarkeit (Stand 2026-06-03, verifiziert)
+
+| Client | Auto-Download via `download`? | Wie / warum |
+|---|---|---|
+| **Parallels Client** | ✅ ja, **ohne** Konfiguration | `download` löst die aktuelle 64-bit-`.deb` aus dem Manifest `RASClient.xml` auf (kein EULA/Login). `PARALLELS_URL` nur für Version-Pinning. |
+| **Citrix Workspace App** | ✅ ja (Seiten-Scrape), **fragil** | `download` scrapet den `icaclient_*_amd64.deb`-Link inkl. frischem Token aus der Citrix-Linux-Seite (kein Login; der Token läuft am selben Tag ab, wird daher pro Lauf frisch geholt). Bricht, wenn Citrix die Seite/Token-Logik ändert → dann `CITRIX_URL` manuell in `urls.conf` setzen (Link nach EULA-Klick kopieren). |
+| **Omnissa Horizon Client** | ❌ nein | Download nur über Customer-Connect-**Login**. Paket manuell mit Account ziehen und als `*Horizon*Client*.bundle` in diesen Ordner legen. |
+
 ## Hinweise
 
 - **Citrix / Parallels** liefern `.deb` → Installation per `apt-get install -y ./datei.deb` (zieht Abhängigkeiten automatisch).

@@ -105,6 +105,32 @@ do_download() {
     # URLs aus urls.conf (oder Env). EULA-gated -> keine stabilen Permalinks,
     # daher traegt der Operator die nach EULA-Klick erhaltenen Links ein.
     [ -f "$SCRIPT_DIR/urls.conf" ] && . "$SCRIPT_DIR/urls.conf"
+
+    # Citrix: der signierte Direktlink liegt (ohne Login) im HTML der Download-
+    # Seite, traegt aber einen Token, der am selben Tag ablaeuft. Ohne gesetzte
+    # CITRIX_URL den aktuellen amd64-.deb-Link inkl. frischem Token aus der Seite
+    # scrapen und SOFORT laden. FRAGIL: bricht, wenn Citrix Seitenstruktur/Token
+    # aendert oder echtes Login einfuehrt -> dann CITRIX_URL manuell in urls.conf
+    # setzen (siehe README.md).
+    if [ -z "${CITRIX_URL:-}" ]; then
+        CITRIX_URL="$(curl -fsSL --retry 3 -m 40 -A 'Mozilla/5.0 (X11; Linux x86_64)' \
+            https://www.citrix.com/downloads/workspace-app/linux/workspace-app-for-linux-latest.html 2>/dev/null \
+            | grep -oE 'rel="//downloads\.citrix\.com/[^"]*icaclient_[^"]*_amd64\.deb[^"]*"' \
+            | head -1 | sed -E 's/^rel="//; s/"$//' || true)"
+        case "${CITRIX_URL:-}" in //*) CITRIX_URL="https:${CITRIX_URL}" ;; esac
+        if [ -n "${CITRIX_URL:-}" ]; then log "Citrix: scraped current link from download page -> ${CITRIX_URL%%\?*}"
+        else warn "Citrix: Direktlink nicht gefunden (Seite geaendert?) -> CITRIX_URL manuell setzen (README.md)."; fi
+    fi
+
+    # Parallels hat kein EULA-/Login-Gate: ohne gesetzte PARALLELS_URL die aktuelle
+    # 64-bit-.deb aus dem offiziellen Manifest aufloesen (immer neueste Version,
+    # kein manuelles Pinning). Citrix/Omnissa koennen das NICHT (signierter
+    # Ablauf-Token bzw. Customer-Connect-Login) — siehe README.md.
+    if [ -z "${PARALLELS_URL:-}" ]; then
+        PARALLELS_URL="$(curl -fsSL --retry 3 -m 30 https://download.parallels.com/ras/RASClient.xml 2>/dev/null \
+            | grep -oE 'https://download\.parallels\.com/[^<]*x86_64\.deb' | head -1 || true)"
+        [ -n "${PARALLELS_URL:-}" ] && log "Parallels: resolved current version from manifest -> ${PARALLELS_URL##*/}"
+    fi
     local any=0
     dl() { # $1=url $2=zieldatei $3=label
         [ -n "${1:-}" ] || { warn "$3: no URL set -> download manually (README.md)"; return 0; }

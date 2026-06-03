@@ -1,20 +1,34 @@
 # ThinForge — VDI-Client-Download-URLs (Vorlage)
 #
-# Nach DebianVDIClients/urls.conf kopieren und die Direkt-Links eintragen, die
-# du nach dem EULA-Klick auf der jeweiligen Hersteller-Seite erhältst. Es gibt
-# KEINE stabilen Permalinks — die Links sind versions-/sitzungsabhängig.
-# Danach:  bash install-vdi-clients-debian.sh download
+# Nach DebianVDIClients/urls.conf kopieren, dann:
+#   bash install-vdi-clients-debian.sh download
+# urls.conf selbst ist .gitignore't (kann sitzungsabhaengige Links enthalten).
 #
-# urls.conf selbst ist .gitignore't (kann interne/temporäre Links enthalten).
-
-# Citrix Workspace App (.deb)
-#CITRIX_URL="https://downloadplugins.citrix.com/ICA/.../icaclient_<version>_amd64.deb"
-
-# Parallels Client / RAS (.deb, 64-bit)
-#PARALLELS_URL="https://download.parallels.com/ras/.../parallels-client_<version>_amd64.deb"
-
-# Omnissa Horizon Client (.bundle)
-#HORIZON_URL="https://download3.omnissa.com/.../Omnissa-Horizon-Client-<version>-linux64.bundle"
-
-# Optional: Flags fuer den Horizon-Bundle-Installer (Default unten)
+# Stand 2026-06-03 (verifiziert) — was sich automatisieren laesst und was nicht:
+#
+# --- Parallels Client (.deb) — VOLL AUTOMATISCH, keine URL noetig ---------------
+# Kein EULA-/Login-Gate. `download` loest die aktuelle 64-bit-.deb selbst aus dem
+# offiziellen Manifest https://download.parallels.com/ras/RASClient.xml auf.
+# PARALLELS_URL nur setzen, wenn du eine BESTIMMTE Version pinnen willst:
+#PARALLELS_URL="https://download.parallels.com/ras/v21/21.1.0.26543/RASClient-21.1.26543_x86_64.deb"
+#
+# --- Citrix Workspace App (.deb) — AUTO via Seiten-Scrape (fragil) --------------
+# `download` scrapet den aktuellen amd64-.deb-Link inkl. frischem Token aus
+#   https://www.citrix.com/downloads/workspace-app/linux/
+# (kein Login noetig). Der Link traegt einen Token, der am selben Tag ablaeuft
+# (Basis-URL ohne Token -> HTTP 403, verifiziert 2026-06-03) — daher wird er bei
+# JEDEM Lauf frisch geholt. CITRIX_URL nur setzen, wenn der Scrape bricht (Citrix
+# aendert die Seitenstruktur) — dann frischen Link nach EULA-Klick kopieren und
+# SOFORT laden:
+#CITRIX_URL="https://downloads.citrix.com/<id>/icaclient_<ver>_amd64.deb?__gda__=exp=...~hmac=..."
+#
+# --- Omnissa Horizon Client (.bundle) — Login noetig ----------------------------
+# Seit dem VMware->Omnissa-Split nur ueber Customer Connect (Login) ladbar
+# (verifiziert 2026-06-03); kein anonymer Direktlink. Paket mit deinem
+# Omnissa-Account von
+#   https://customerconnect.omnissa.com/downloads/info/slug/desktop_end_user_computing/omnissa_horizon_clients/8
+# ziehen und manuell als *Horizon*Client*.bundle in diesen Ordner legen.
+# HORIZON_URL nur setzen, falls du einen (z.B. internen/gespiegelten) Link hast:
+#HORIZON_URL="https://.../Omnissa-Horizon-Client-<version>-linux64.bundle"
+# Optional: Flags fuer den Bundle-Installer (Default unten)
 #HORIZON_BUNDLE_FLAGS="--console --required --eulas-agreed"
