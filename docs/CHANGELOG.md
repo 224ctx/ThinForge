@@ -1,6 +1,36 @@
 # ThinForge Changelog
 
-## 2026-06-03
+## 2026-06-11
+
+- **Stufenweise Image-Verteilungen werden vollständig nachverfolgt** — Bei stufenweisen Verteilungen (Rollouts) wurde der Abschluss der einzelnen Rechner intern nicht verbucht: Die Stufen-Statistik blieb dauerhaft auf „wird verteilt" stehen, und die Sicherheitsbremse („bei zu vielen Fehlern anhalten") konnte nie auslösen. Außerdem konnte ein ungünstig getimter Statusbericht eines Rechners dessen anstehende Neuinstallation unbemerkt entschärfen. Rollout-Stufen nutzen jetzt dieselbe bewährte Maschinerie wie einzelne Verteilungen — mit korrekter Statistik, funktionierender Fehlerbremse und verlässlichem Start. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Benachrichtigungen bei Störungen funktionieren wieder** — Die regelmäßige Prüfung der Alarm-Regeln (z. B. Client offline, Festplatte voll) war durch einen Platzhalter lahmgelegt und lief nie. Sie läuft jetzt alle fünf Minuten. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Wartungsfenster unterdrücken Alarme jetzt wirklich** — Wartungsfenster mit Geltungsbereich „alle Rechner" (die Voreinstellung) sowie wiederkehrende Fenster (täglich/wöchentlich/monatlich) wurden bei der Alarm-Unterdrückung ignoriert — Benachrichtigungen kamen trotz geplanter Wartung. Beides wird jetzt korrekt ausgewertet, auch in der Aktiv-Anzeige der Fenster-Liste. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **ThinVPN-Protokoll wächst nicht mehr unbegrenzt** — Die VPN-Ereignis-Übernahme speicherte dieselben Ereignisse bei jedem Abruf erneut; die Protokoll-Tabelle wuchs dadurch unbegrenzt. Ereignisse werden jetzt eindeutig erkannt und nur einmal gespeichert. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **TPM-Status der Clients wird gespeichert** — Der vom Client gemeldete TPM-Status (vorhanden/versiegelt) ging beim Speichern still verloren, weil die Datenbankfelder fehlten. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **„Lager"-Markierung beim Anlegen eines Clients wird übernommen** — Der Lager-Schalter im Anlege-Formular wurde beim Speichern verworfen; die Markierung musste nachträglich gesetzt werden. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Client-Agent: Sicherungsstände werden korrekt verwaltet** — Der Agent behält jetzt zuverlässig genau zwei Sicherungsstände (den aktuellen und den vorherigen) inklusive der zugehörigen Home-Bereiche. Bisher konnten durch eine fehlerhafte Sortierung die falschen Stände gelöscht und im Fehlerfall ein ungeeigneter Stand für die Wiederherstellung gewählt werden. Wirkt nach Aktualisierung der Client-Agenten.
+
+- **Mehrstufige Betriebssystem-Updates bleiben nicht mehr hängen** — Musste ein Client mehrere Update-Schritte nacheinander durchlaufen (z. B. von einer älteren Version über eine Zwischenversion zum Ziel), konnte die Kette nach dem ersten Schritt stehen bleiben: Der nächste Schritt bekam nie eine Download-Freigabe. Betroffen waren nur Ketten ohne zusammengefasste Updates. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Einrichtungs-Assistent prüft Eingaben und meldet Teilprobleme** — Der Assistent nimmt fehlerhafte Eingaben (z. B. ein zu kurzes Administrator-Passwort, ungültige Netzwerk-Adressen oder eine ungültige Zertifikats-Laufzeit) nicht mehr an, sondern weist sie vor dem Speichern mit einer klaren Fehlermeldung ab. Schlägt beim Abschluss ein Teilschritt fehl (z. B. das Erzeugen des Zertifikats oder der Neustart des Zeitdienstes), wird das jetzt am Ende des Assistenten angezeigt statt hinter einer Erfolgsmeldung zu verschwinden. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Geplante Verteilungen funktionieren auch im Release-Deployment** — In der Auslieferungs-Variante der Dienste fehlten dem Hintergrund-Dienst einige Verzeichnis-Zuordnungen und Einstellungen, die er zum Aktivieren geplanter Verteilungen braucht; außerdem nutzte die DHCP/PXE-Überwachung dort noch die alte, weniger aussagekräftige Prüfung. Beides ist an die Entwicklungs-Variante angeglichen. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Werksreset macht den Server nicht mehr unbrauchbar** — Nach einem Zurücksetzen auf Werkseinstellungen konnte der Server beim nächsten Neustart in einer Fehlerschleife hängen bleiben, weil eine interne Verwaltungstabelle mit geleert wurde. Außerdem ließ sich die ThinVPN-Verwaltung nach einem Reset nicht mehr einrichten. Beides ist behoben; der Reset hinterlässt jetzt einen sauberen Zustand für den Einrichtungs-Assistenten. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Zertifikats-Upload kann die Weboberfläche nicht mehr lahmlegen** — Beim Hochladen eines eigenen TLS-Zertifikats wurde das bisherige Zertifikat ersetzt, bevor die Dateien geprüft wurden; ein unpassender oder defekter Schlüssel machte die Weboberfläche anschließend unerreichbar. Hochgeladene Zertifikate und Schlüssel werden jetzt vollständig geprüft (inklusive Zusammengehörigkeit von Zertifikat und Schlüssel), bevor sie übernommen werden — bei Fehlern bleibt das bisherige Zertifikat einfach aktiv und der Upload wird mit einer klaren Fehlermeldung abgewiesen. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Abgebrochene Verteilungen starten keine neuen Installationen mehr** — Wurde eine stufenweise Image-Verteilung (Rollout) abgebrochen, blieben die betroffenen Rechner trotzdem für die Neuinstallation vorgemerkt und wurden beim nächsten Start neu bespielt. Ein Abbruch nimmt die noch nicht gestarteten Rechner jetzt zuverlässig aus der Verteilung (inklusive geplanter Neustarts), während bereits laufende Installationen ungestört zu Ende laufen. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **DHCP/PXE-Dienst übersteht Server-Neustarts zuverlässig** — Kam nach einem Neustart des Servers die Rollout-Netzwerkkarte erst nach dem Container-Dienst hoch, startete der DHCP/PXE-Dienst nicht mehr und blieb dauerhaft stehen. Er wartet jetzt automatisch auf die Netzwerkkarte und bindet sich, sobald sie verfügbar ist. Damit ein dauerhaft fehlendes oder falsch konfiguriertes Netzwerk-Interface dabei nicht unbemerkt bleibt, wird es in der Dienst-Überwachung als fehlerhaft angezeigt, und beim Speichern der Netzwerk-Einstellungen wird das Interface jetzt gegen die tatsächlich vorhandenen geprüft. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Namensauflösung „thinforge-server" zeigt nicht mehr auf eine falsche Adresse** — Wurden Netzwerk- oder DNS-Einstellungen gespeichert, während das Rollout-Interface gerade nicht verfügbar war, konnte der interne DNS-Eintrag „thinforge-server" dauerhaft auf eine falsche Adresse (das Gateway) zeigen — Clients hätten den Server dann nicht erreicht. Das Speichern verwendet jetzt die hinterlegte Rollout-Adresse oder weist die Änderung mit einer klaren Fehlermeldung ab. Wirkt nach Aktualisierung der Server-Dienste.
 
 - **Hinweis-Dialoge auf den Client-Rechnern erscheinen wieder zuverlässig** — Meldungen, die der Client-Agent auf dem Bildschirm des angemeldeten Benutzers anzeigt (z. B. der Neustart-Countdown nach einem Betriebssystem-Update oder die Anzeige einer aktiven Fernwartungs-Sitzung), wurden in bestimmten Anmelde-Situationen nicht mehr angezeigt: Der Agent hatte versehentlich eine bereits abgemeldete Sitzung des Anmeldebildschirms angesprochen und die Meldung dann stillschweigend verworfen. Der Agent wählt jetzt zuverlässig die tatsächlich aktive Sitzung des angemeldeten Benutzers. Wirkt nach Aktualisierung der Client-Agenten.
 

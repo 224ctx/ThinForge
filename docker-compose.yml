@@ -183,9 +183,16 @@ services:
       REDIS_URL: redis://redis:6379/0
       STORAGE_DIR: /data
       SIGNING_KEY_DIR: /data/keys
+      # Parität zum Backend: der Worker aktiviert geplante Deployments —
+      # er braucht dieselben Pfade (PXE/TFTP, dnsmasq, NFS-Config).
+      TFTP_ROOT: /var/lib/tftpboot
+      THINFORGE_ENABLED_PROFILES: ${THINFORGE_ENABLED_PROFILES:-}
     volumes:
       - ${STORAGE_DIR:-./ThinForgeDaten}:/data
       - ${STORAGE_DIR:-./ThinForgeDaten}/ssh:/data/ssh
+      - ${STORAGE_DIR:-./ThinForgeDaten}/dnsmasq:/etc/dnsmasq.d
+      - ${STORAGE_DIR:-./ThinForgeDaten}/tftp:/var/lib/tftpboot
+      - ${STORAGE_DIR:-./ThinForgeDaten}/nfs-config:/data/nfs-config
       - ./agent-go/bin:/app/agent-go/bin:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/docker-compose.yml:ro
@@ -310,7 +317,9 @@ services:
     environment:
       THINFORGE_BACKEND: http://127.0.0.1:8000
     healthcheck:
-      test: ["CMD-SHELL", "kill -0 $(cat /var/run/dnsmasq/dnsmasq.pid 2>/dev/null) 2>/dev/null || kill -0 $(pidof dnsmasq) 2>/dev/null"]
+      # Prozess + Rollout-Interface-Existenz — Script ist im Image
+      # (docker/dnsmasq/healthcheck.sh, seit bind-dynamic).
+      test: ["CMD", "/healthcheck.sh"]
       interval: 15s
       timeout: 5s
       retries: 3

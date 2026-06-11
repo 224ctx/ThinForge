@@ -50,7 +50,7 @@ CREATE TYPE updaterolloutclientstatus AS ENUM (
 CREATE TYPE rollbacktaskstatus AS ENUM ('active', 'completed', 'aborted');
 CREATE TYPE rollbacktaskclientstatus AS ENUM ('pending', 'prepared', 'completed');
 CREATE TYPE rolloutstatus AS ENUM ('draft', 'active', 'paused', 'completed', 'cancelled');
-CREATE TYPE rolloutclientstatus AS ENUM ('pending', 'deploying', 'done', 'failed');
+CREATE TYPE rolloutclientstatus AS ENUM ('pending', 'deploying', 'done', 'failed', 'cancelled');
 CREATE TYPE capturejobstatus AS ENUM ('pending', 'capturing', 'done', 'failed', 'cancelled');
 
 -- ── 1. users ────────────────────────────────────────────────────────────────
@@ -416,6 +416,11 @@ CREATE TABLE vpn_clients (
     vpn_apply_error         TEXT,
     vpn_lan_mode            TEXT
         CHECK (vpn_lan_mode IS NULL OR vpn_lan_mode IN ('lan','remote','unknown')),
+    -- TPM-Status aus dem Agent-Heartbeat (tpm_present/tpm_sealed im
+    -- Full-Heartbeat); tpm_updated_at = Zeitpunkt der letzten Meldung.
+    tpm_present             BOOLEAN,
+    tpm_sealed              BOOLEAN,
+    tpm_updated_at          TIMESTAMPTZ,
     -- Cloud-Verbindungsstatus aus dem NetBird-Mgmt-Poll (vpn_polling),
     -- alleinige Quelle für "verbunden" im VPN-Tab. NULL = nie bestätigt.
     vpn_cloud_connected     BOOLEAN,
@@ -544,11 +549,16 @@ CREATE TABLE clone_deployments (
     wol_sent                         BOOLEAN               NOT NULL DEFAULT false,
     post_action                      VARCHAR(20)           NOT NULL DEFAULT 'reboot',
     maintenance_window_id            UUID,
+    -- Stage-Deployments von Image-Rollouts: activate_stage legt pro Stage ein
+    -- clone_deployment an, damit Callbacks/Safety-Net/NFS-Grant identisch zu
+    -- manuellen Deployments laufen; /done spiegelt darüber in rollout_clients.
+    rollout_id                       UUID,
     created_at                       TIMESTAMPTZ           NOT NULL DEFAULT now(),
     updated_at                       TIMESTAMPTZ           NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
     FOREIGN KEY (gruppe_id)             REFERENCES gruppen             (id) ON DELETE SET NULL,
-    FOREIGN KEY (maintenance_window_id) REFERENCES maintenance_windows (id) ON DELETE SET NULL
+    FOREIGN KEY (maintenance_window_id) REFERENCES maintenance_windows (id) ON DELETE SET NULL,
+    FOREIGN KEY (rollout_id)            REFERENCES rollouts            (id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_deployment_active ON clone_deployments (status) WHERE status = 'active';
@@ -763,6 +773,11 @@ INSERT INTO system_settings_vpn (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE vpn_audit_events (
     id                  BIGSERIAL PRIMARY KEY,
+    -- NetBird-Event-ID — Dedup-Anker für den Pull-Loop (ON CONFLICT DO
+    -- NOTHING), weil der MAX(occurred_at)-Watermark inklusiv ist und das
+    -- jüngste Event sonst bei jedem Tick erneut eingefügt würde. Nullable
+    -- nur wegen Bestandszeilen aus der Zeit vor dieser Spalte.
+    netbird_event_id    TEXT,
     event_type          TEXT NOT NULL,
     peer_id             TEXT,
     related_client_id   UUID REFERENCES clients(id) ON DELETE SET NULL,
@@ -773,6 +788,9 @@ CREATE TABLE vpn_audit_events (
 
 CREATE INDEX vpn_audit_events_time_idx ON vpn_audit_events (occurred_at DESC);
 CREATE INDEX vpn_audit_events_peer_idx ON vpn_audit_events (peer_id, occurred_at DESC);
+CREATE UNIQUE INDEX vpn_audit_events_netbird_id_uq
+    ON vpn_audit_events (netbird_event_id)
+    WHERE netbird_event_id IS NOT NULL;
 
 -- ── 32. netbird_provisioning ────────────────────────────────────────────────
 --
