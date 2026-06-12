@@ -372,6 +372,11 @@ CREATE TABLE client_tasks (
     task_type     VARCHAR(50)  NOT NULL,
     status        VARCHAR(20)  NOT NULL DEFAULT 'pending',
     arq_job_id    VARCHAR(255),
+    -- Wann der Task zuletzt in die Redis-Queue gepusht wurde. Der
+    -- Stale-Re-Dispatch (task_dispatch.rs) keyt hierauf statt auf created_at,
+    -- damit nicht jeder >5min alte pending-Task bei JEDEM Heartbeat neu
+    -- enqueued wird (Audit task_dispatch.rs:170).
+    dispatched_at TIMESTAMPTZ,
     started_at    TIMESTAMPTZ,
     finished_at   TIMESTAMPTZ,
     error_msg     TEXT,
@@ -821,6 +826,13 @@ CREATE TABLE vpn_host_access_modules (
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
     created_by   UUID
 );
+
+-- Modul-Name muss eindeutig sein (case-insensitive): zwei gleichnamige Module
+-- erzeugen gleichnamige NetBird-Resources, die der Reconcile gegen dasselbe
+-- Live-Objekt matcht → flappende UpdateResource-Aktionen (Audit vpn_desired.rs:245).
+-- DB-Backstop zum Service-seitigen Duplikat-Check in vpn_host_modules::create.
+CREATE UNIQUE INDEX IF NOT EXISTS vpn_host_access_modules_name_uq
+    ON vpn_host_access_modules (lower(name));
 
 CREATE TABLE vpn_host_access_rules (
     id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

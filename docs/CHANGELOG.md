@@ -2,6 +2,30 @@
 
 ## 2026-06-12
 
+- **Agent-Upload kann die Agent-Datei nicht mehr zerstören** — Ein versehentlich leerer oder ungültiger Upload der Agent-Datei überschrieb bisher die funktionierende Version, bevor er geprüft wurde. Uploads werden jetzt erst auf Inhalt und Dateityp geprüft und nur bei Gültigkeit übernommen. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Agent-Update einzelner Geräte stoppt keine fremden Updates mehr** — Das Starten eines Agent-Updates für ausgewählte Geräte oder eine Gruppe brach bisher alle laufenden Agent-Updates flottenweit ab. Jetzt sind nur noch die tatsächlich angesprochenen Geräte betroffen. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Stapel-Befehle per SSH berücksichtigen das eingestellte Zeitlimit** — Beim gleichzeitigen Ausführen eines Befehls auf mehreren Geräten wurde das angegebene Zeitlimit ignoriert und stattdessen fest 30 Sekunden verwendet; länger laufende Befehle (z. B. Paket-Updates) brachen vorzeitig ab. Das eingestellte Zeitlimit wird nun verwendet. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Gleichzeitige Klon-/Wiederherstellungs-Vorgänge stören sich nicht mehr** — Wurden zwei Cloning-Vorgänge fast gleichzeitig gestartet (z. B. Doppelklick), konnten beide starten und sich gegenseitig die Daten beschädigen. Der Einzelvorgang-Schutz greift jetzt zuverlässig. Außerdem wird ein Abbruch während der ersten Phase eines Update-Klons jetzt ehrlich gemeldet und tatsächlich befolgt, statt scheinbar erfolgreich weiterzulaufen. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Server bleibt nach kurzen Docker-Aussetzern erreichbar** — Bei einem kurzen Aussetzer des Container-Dienstes während des Speicherns der Netzwerk-Konfiguration konnte der Server die korrekt eingestellten Adressen verlieren und für die Clients unerreichbar werden, obwohl „gespeichert" gemeldet wurde. Die Adressermittlung greift in diesem Fall jetzt auf die hinterlegte Konfiguration zurück. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Netzwerk-Adresse wird vor dem Anwenden geprüft** — Beim Setzen der Rollout-Netzwerkadresse wurden ungültige Adressen erst akzeptiert und die alte Adresse entfernt, was die Netzwerkkarte adresslos zurücklassen konnte. Adressen werden jetzt vorab geprüft, und die neue wird gesetzt, bevor die alte entfernt wird. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **NTP-Zugriffsbeschränkung bleibt nach Bearbeitung erhalten** — Das Bearbeiten der Zeitserver öffnete bisher den Zeitdienst versehentlich für das gesamte Netzwerk, statt ihn auf das Rollout-Subnetz beschränkt zu lassen. Die im Setup gesetzte Beschränkung bleibt nun erhalten. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Verteilung per BitTorrent meldet Fehler korrekt** — Schlug das Hinzufügen einer Partition beim BitTorrent-Restore fehl, wurde der Vorgang trotzdem als erfolgreich gemeldet, obwohl eine Partition nicht geschrieben war. Solche Fehler werden jetzt erkannt und der Vorgang als fehlgeschlagen gemeldet. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Aufgaben werden bei Worker-Ausfall nicht mehr mehrfach ausgeführt** — Fiel der Hintergrund-Dienst zeitweise aus, wurde eine wartende Aufgabe bei jedem Geräte-Kontakt erneut eingereiht und später vielfach ausgeführt. Aufgaben werden jetzt nur noch einmal eingereiht. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **ThinVPN: Modul- und Router-Verwaltung robuster** — Doppelte oder mit internen Namen kollidierende VPN-Modulnamen werden jetzt abgewiesen, statt eine dauerhaft instabile Konfiguration zu erzeugen. Bei mehreren Geräten gleichen Namens wird die VPN-Zuordnung nicht mehr falsch geraten. Und ein zweiter, manuell angelegter Netzwerk-Router wird nicht mehr versehentlich überschrieben. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Fehler werden nicht mehr stillschweigend verschluckt** — An mehreren Stellen wurden interne Fehler ignoriert und Aktionen als erfolgreich gemeldet, obwohl sie es nicht waren. Behoben, u. a.: Speichern von Alarm-Kanälen löscht bei einem kurzen Datenbank-Aussetzer nicht mehr versehentlich das hinterlegte SMTP-Passwort; ein abgebrochener ISO-Upload hinterlässt keine unvollständige, trotzdem auswählbare Datei mehr; die Server-Dienst-Überwachung meldet einen Datenbank-Ausfall jetzt ehrlich als „degraded" statt „ok"; fehlgeschlagene NFS-Freigaben, chrony-Neustarts und Playbook-Importe werden sichtbar gemeldet bzw. brechen sauber ab; der Werksreset meldet, falls einzelne Dateien nicht gelöscht werden konnten. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **NTP-Server-Eingaben werden geprüft** — Beim Speichern der Zeitserver-Einstellungen werden ungültige Einträge (leer oder mit unerlaubten Zeichen) jetzt abgewiesen, statt eine fehlerhafte Zeitdienst-Konfiguration zu schreiben. Wirkt nach Aktualisierung der Server-Dienste.
+
 - **Sicherheitsprotokoll erfasst jetzt An-/Abmeldungen und Verwaltungsaktionen** — Das Audit-Protokoll blieb bisher faktisch leer: An- und Abmeldungen, fehlgeschlagene Anmeldeversuche, Passwort- und 2FA-Änderungen, Benutzerverwaltung sowie Lizenz- und Signaturschlüssel-Aktionen wurden nicht aufgezeichnet. Diese sicherheitsrelevanten Ereignisse landen jetzt im Audit-Protokoll (das Werksreset wird ins Server-Log geschrieben, da es das Protokoll selbst leert). Wirkt nach Aktualisierung der Server-Dienste.
 
 - **Passwort-Zurücksetzen beendet bestehende Sitzungen** — Wurde das Passwort eines Benutzers über die Benutzerverwaltung geändert, blieben dessen bestehende Sitzungen gültig — ein zuvor entwendeter Zugang funktionierte weiter. Jetzt werden bestehende Sitzungen beendet und die Zwei-Faktor-Anmeldung zurückgesetzt. Wirkt nach Aktualisierung der Server-Dienste.
