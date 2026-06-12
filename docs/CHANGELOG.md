@@ -2,6 +2,8 @@
 
 ## 2026-06-12
 
+- **Aussagekräftige Fehlermeldungen in der Verwaltungsoberfläche** — Bisher zeigte die Oberfläche bei vielen Fehlern nur den allgemeinen Hinweis „An error occurred", auch wenn z. B. die Verbindung zum Server gestört war. Fehlermeldungen nennen jetzt die konkrete Ursache: Server nicht erreichbar, Zeitüberschreitung, fehlende Berechtigung, nicht gefundene Ressource u. a. — in der jeweils eingestellten Sprache. Bei einer Verbindungsstörung wiederholen sich die Hinweise außerdem nicht mehr im Sekundentakt. Zusätzlich wird das Aktivieren eines Lager-Geräts am Lizenz-Limit jetzt mit einer klaren Meldung abgelehnt, statt ohne Rückmeldung zu scheitern. Wirkt nach Aktualisierung der Server-Dienste.
+
 - **Client-Agent: Update-Signatur wird vor dem Einspielen erzwungen** — Beim Anwenden eines Betriebssystem-Updates auf dem Client wurde die Signaturprüfung in einem Sonderfall (fehlende Signaturdatei) stillschweigend übersprungen, statt das Update abzulehnen. Außerdem werden die Update-Beschreibungsdaten jetzt streng auf gültige Form geprüft. Beides verhindert, dass manipulierte Update-Daten eingespielt werden. Wirkt nach Aktualisierung der Client-Agenten.
 
 - **Client-Agent: Update lässt das Gerät nie ohne Agent zurück** — Bei der Agent-Aktualisierung wurde die laufende Agent-Datei entfernt, bevor die neue übertragen war; ein Übertragungsfehler hätte das Gerät ohne Agent zurückgelassen. Die neue Datei wird jetzt erst vollständig übertragen, geprüft und dann ausgetauscht — bei einem Fehler bleibt die funktionierende Version erhalten. Wirkt nach Aktualisierung der Server-Dienste.
