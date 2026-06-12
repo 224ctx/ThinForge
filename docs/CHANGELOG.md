@@ -1,6 +1,20 @@
 # ThinForge Changelog
 
-## 2026-06-11
+## 2026-06-12
+
+- **Sicherheitsprotokoll erfasst jetzt An-/Abmeldungen und Verwaltungsaktionen** — Das Audit-Protokoll blieb bisher faktisch leer: An- und Abmeldungen, fehlgeschlagene Anmeldeversuche, Passwort- und 2FA-Änderungen, Benutzerverwaltung sowie Lizenz- und Signaturschlüssel-Aktionen wurden nicht aufgezeichnet. Diese sicherheitsrelevanten Ereignisse landen jetzt im Audit-Protokoll (das Werksreset wird ins Server-Log geschrieben, da es das Protokoll selbst leert). Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Passwort-Zurücksetzen beendet bestehende Sitzungen** — Wurde das Passwort eines Benutzers über die Benutzerverwaltung geändert, blieben dessen bestehende Sitzungen gültig — ein zuvor entwendeter Zugang funktionierte weiter. Jetzt werden bestehende Sitzungen beendet und die Zwei-Faktor-Anmeldung zurückgesetzt. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Mindestlänge für Passwörter durchgängig erzwungen** — Die Mindestlänge von 8 Zeichen galt bisher nur beim Selbst-Ändern des Passworts; beim Zurücksetzen und beim Anlegen/Bearbeiten von Benutzern konnten leere oder sehr kurze Passwörter gesetzt werden. Das wird nun überall geprüft. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Härtung der Anmelde-Schnittstelle** — Die Abmelde-Schnittstelle ist jetzt ratenbegrenzt und akzeptiert nur noch gültige Sitzungs-Token; die Anmelde-Schnittstellen weisen übergroße Anfragen ab. Damit kann ein Gerät im Netzwerk den Server nicht mehr durch massenhafte oder überdimensionierte Anfragen belasten. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Image-Aufnahme: Manipulation eines anstehenden Auftrags verhindert** — Ein Gerät im Netzwerk konnte einen anstehenden Image-Aufnahme-Auftrag eines anderen Geräts stören, indem es dessen Netzwerk-Boot-Konfiguration zurücksetzte, bevor das Zugangs-Token geprüft wurde. Die Prüfung erfolgt jetzt zuerst. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **ThinVPN: Modul-Freigaben wirken nur noch auf den jeweiligen Host** — Bei den optionalen ThinVPN-Host-Modulen galten die freigegebenen Ports versehentlich für die gesamte Zielgruppe (alle Modul-Hosts und den Server) statt nur für den Host des jeweiligen Moduls. Die Freigaben sind jetzt exakt auf den jeweiligen Modul-Host beschränkt. Wirkt nach Aktualisierung der Server-Dienste; bestehende Konfigurationen werden beim nächsten Abgleich automatisch korrigiert.
+
+- **Image-Verteilung: Statusmeldung eines Geräts kann fremde Geräte nicht mehr stören** — Über die öffentliche Abschluss-Meldung einer Image-Verteilung konnte ein Gerät im Netzwerk ein anderes registriertes Gerät auf „offline" setzen und ihm den Dateizugriff entziehen, ohne ein gültiges Zugangs-Token. Diese Aktionen erfordern jetzt einen gültigen, zur laufenden Verteilung gehörenden Token. Wirkt nach Aktualisierung der Server-Dienste.
 
 - **Stufenweise Image-Verteilungen werden vollständig nachverfolgt** — Bei stufenweisen Verteilungen (Rollouts) wurde der Abschluss der einzelnen Rechner intern nicht verbucht: Die Stufen-Statistik blieb dauerhaft auf „wird verteilt" stehen, und die Sicherheitsbremse („bei zu vielen Fehlern anhalten") konnte nie auslösen. Außerdem konnte ein ungünstig getimter Statusbericht eines Rechners dessen anstehende Neuinstallation unbemerkt entschärfen. Rollout-Stufen nutzen jetzt dieselbe bewährte Maschinerie wie einzelne Verteilungen — mit korrekter Statistik, funktionierender Fehlerbremse und verlässlichem Start. Wirkt nach Aktualisierung der Server-Dienste.
 
