@@ -2,6 +2,8 @@
 
 ## 2026-06-12
 
+- **Geräte-Updates passen sich schwankender Bandbreite an (Home-Office/VPN/WLAN)** — Die Download-Drosselung für Betriebssystem-Updates misst die Leitungsqualität jetzt direkt an der laufenden Update-Verbindung statt an einem vorab erhobenen Referenzwert. Das behebt zwei Probleme: Nach einem Standortwechsel (z. B. Büro → Home-Office) konnte ein Update unnötig auf der Minimal-Geschwindigkeit verharren, obwohl die Leitung frei war; und auf schwachen Anschlüssen bremste sich das Update zu spät, was parallele Arbeitssitzungen stören konnte. Updates nutzen die verfügbare Bandbreite jetzt besser aus und nehmen sich automatisch zurück, sobald die Leitung anderweitig gebraucht wird — auch bei WLAN-Schwankungen ohne unnötige Dauer-Drosselung. Wirkt nach Aktualisierung der Client-Agenten.
+
 - **Zuverlässigere Geräte-Aktionen und Rollouts** — Mehrere selten auftretende Fehler wurden behoben: Geräte-Befehle (z. B. Neustart) konnten in ungünstigem Timing doppelt ausgeführt werden; ein gestufter Rollout konnte hängen bleiben, wenn das gewählte Abbild noch nicht fertig gebaut war; das Abbrechen eines Rollouts konnte ein gerade startendes Gerät fälschlich als abgebrochen markieren. Diese Abläufe sind jetzt abgesichert. Wirkt nach Aktualisierung der Server-Dienste.
 
 - **Geräte-Updates lassen kein Rollback-Abbild mehr verlieren** — In seltenen Fällen konnte die automatische Aufräumung alter Systemstände den Stand der aktuell laufenden Version löschen, wodurch das nächste Update fehlschlug und eine vollständige Neuinstallation nötig wurde. Der laufende Stand ist jetzt geschützt, und beim Löschen eines Standes werden auch die zugehörigen Home-Daten mit entfernt (keine verwaisten Reste mehr). Wirkt nach Aktualisierung der Client-Agenten.
