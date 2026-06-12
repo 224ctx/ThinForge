@@ -528,6 +528,12 @@ CREATE TABLE rollout_clients (
     FOREIGN KEY (client_id)  REFERENCES clients  (id) ON DELETE CASCADE
 );
 
+-- Ein Client darf pro Rollout nur EINMAL einer Stage zugeordnet sein. Verhindert
+-- Duplikate, wenn launch_rollout nach einem partiellen Fehler erneut läuft
+-- (Audit rollouts.rs:541); launch nutzt dazu ON CONFLICT DO NOTHING.
+CREATE UNIQUE INDEX ix_rollout_clients_rollout_client_uq
+    ON rollout_clients (rollout_id, client_id);
+
 -- ── 19. clone_deployments ───────────────────────────────────────────────────
 
 CREATE TABLE clone_deployments (

@@ -2,6 +2,16 @@
 
 ## 2026-06-12
 
+- **Client-Agent: Update-Signatur wird vor dem Einspielen erzwungen** — Beim Anwenden eines Betriebssystem-Updates auf dem Client wurde die Signaturprüfung in einem Sonderfall (fehlende Signaturdatei) stillschweigend übersprungen, statt das Update abzulehnen. Außerdem werden die Update-Beschreibungsdaten jetzt streng auf gültige Form geprüft. Beides verhindert, dass manipulierte Update-Daten eingespielt werden. Wirkt nach Aktualisierung der Client-Agenten.
+
+- **Client-Agent: Update lässt das Gerät nie ohne Agent zurück** — Bei der Agent-Aktualisierung wurde die laufende Agent-Datei entfernt, bevor die neue übertragen war; ein Übertragungsfehler hätte das Gerät ohne Agent zurückgelassen. Die neue Datei wird jetzt erst vollständig übertragen, geprüft und dann ausgetauscht — bei einem Fehler bleibt die funktionierende Version erhalten. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Image-Wiederherstellung auf NVMe-/eMMC-Geräten** — Auf Geräten mit NVMe- oder eMMC-Speicher schlug das Anlegen der Daten-Partition fehl, weil der Gerätename falsch abgeleitet wurde. Das ist behoben; SATA-, NVMe- und eMMC-Datenträger werden korrekt erkannt. Wirkt bei der nächsten Image-Vorbereitung.
+
+- **Image-Vorbereitung bricht bei fehlender Daten-Partition ab** — Konnte die Daten-Partition nicht eingebunden werden, lief die Installation bisher trotzdem weiter und legte die Agent-Daten am falschen Ort ab (die nach dem ersten Update verloren gingen). Die Installation bricht jetzt mit einer klaren Meldung ab. Wirkt bei der nächsten Image-Vorbereitung.
+
+- **Klon-Fehler werden zuverlässig gemeldet** — Beim Erstellen eines Klons konnte ein Fehler einer Partition den Vorgang stillschweigend abbrechen, ohne ihn als Fehler auszuweisen. Solche Fehler werden jetzt erkannt und mit Angabe der betroffenen Partition gemeldet. Außerdem wurde die Wiederherstellung von Festplatten-Abbildern (dd-Image) korrigiert, die zuvor ihre Dateien nicht fand. Wirkt bei der nächsten Image-Vorbereitung bzw. Verteilung.
+
 - **Agent-Upload kann die Agent-Datei nicht mehr zerstören** — Ein versehentlich leerer oder ungültiger Upload der Agent-Datei überschrieb bisher die funktionierende Version, bevor er geprüft wurde. Uploads werden jetzt erst auf Inhalt und Dateityp geprüft und nur bei Gültigkeit übernommen. Wirkt nach Aktualisierung der Server-Dienste.
 
 - **Agent-Update einzelner Geräte stoppt keine fremden Updates mehr** — Das Starten eines Agent-Updates für ausgewählte Geräte oder eine Gruppe brach bisher alle laufenden Agent-Updates flottenweit ab. Jetzt sind nur noch die tatsächlich angesprochenen Geräte betroffen. Wirkt nach Aktualisierung der Server-Dienste.
@@ -81,6 +91,20 @@
 - **VDI-Clients (Citrix / Parallels / Omnissa Horizon) integrierbar** — Die VDI-Clients lassen sich jetzt über einen Ordner auf der Tools-ISO bereitstellen; zum Abschluss der Image-Vorbereitung wird ihre Installation optional angeboten. Wirkt bei der nächsten Image-Vorbereitung.
 
 - **Neue Funktion: VDI-Client-Pakete über die Weboberfläche hochladen** — Im Bereich Cloning gibt es einen neuen Tab „VDI-Clients", über den die Installationspakete für Citrix Workspace App, Parallels Client und Omnissa Horizon Client hochgeladen werden können. Die Pakete werden beim nächsten Start der Cloning-VM automatisch in die Tools-ISO übernommen, sodass sie bei der Image-Vorbereitung zur Verfügung stehen. Bisher mussten die Dateien manuell auf dem Server abgelegt werden — das ist vor allem bei Omnissa problematisch, weil der Download eine Anmeldung beim Hersteller erfordert. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Hardware-Inventar der Geräte wird wieder erfasst** — Die per Inventar-Abfrage ermittelten Hardware-Daten (CPU, Arbeitsspeicher, Hersteller, Modell, Seriennummer, BIOS, Datenträger) wurden zwar abgefragt, aber nicht gespeichert; die entsprechenden Felder blieben leer. Sie werden jetzt ausgewertet und beim Gerät hinterlegt. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Verteilungen werden zuverlässig als abgeschlossen erkannt** — Ging die abschließende Fertig-Meldung eines Geräts verloren (z. B. durch Neustart kurz vor der Rückmeldung), blieb eine Verteilung dauerhaft als „aktiv" stehen. Ein Abgleich erkennt jetzt Verteilungen, bei denen bereits alle Geräte fertig sind, und schließt sie ab. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Wiederherstellung prüft alle ausgewählten Sicherungen** — Schlug bei der Auswahl mehrerer Sicherungsdateien die Prüfung einer Datei fehl, konnte die Wiederherstellung trotzdem mit ungeprüften Dateien weiterlaufen. Sie wird jetzt blockiert, bis jede ausgewählte Datei erfolgreich geprüft wurde. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Speichern eines Updates legt nicht versehentlich eine neue Basis an** — Konnte der Dialog „Klon speichern" den VM-Status beim Öffnen nicht laden, wechselte er stillschweigend in den Basis-Modus — der Bediener hätte unbemerkt eine neue Basis statt eines Updates angelegt. Jetzt erscheint stattdessen ein deutlicher Fehlerhinweis und das Speichern bleibt gesperrt. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Fortschrittsanzeige hängt nicht mehr bei kurzen Aussetzern** — Ein einzelner kurzer Abfrage-Fehler während eines Klon-/Wiederherstellungs-Vorgangs ließ die Anzeige dauerhaft auf „läuft" stehen. Erst nach mehreren aufeinanderfolgenden Fehlern wird die Aktualisierung gestoppt. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Anmeldung und Uploads in der Weboberfläche robuster** — Eine fehlgeschlagene Anmeldung zeigt wieder die konkrete Fehlermeldung (statt den Nutzer wortlos zur Anmeldeseite zurückzuwerfen), und ein Datei-Upload beendet eine gültige Sitzung nicht mehr unnötig. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Englische Beschriftung der Zeitserver-Einstellungen** — Im englischsprachigen Bereich der Zeitserver-Einstellungen wurden interne Platzhalter statt der Texte angezeigt. Die fehlenden Übersetzungen wurden ergänzt. Wirkt nach Aktualisierung der Server-Dienste.
 
 ## 2026-06-02
 

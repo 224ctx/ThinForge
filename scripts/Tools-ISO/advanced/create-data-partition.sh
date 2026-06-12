@@ -46,6 +46,18 @@ log()   { echo -e "${GREEN}[data-partition]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[data-partition]${NC} $*"; }
 fatal() { echo -e "${RED}[data-partition]${NC} $*" >&2; exit 1; }
 
+# Partitionsbezeichnung: NVMe/eMMC/NBD verwenden "p"-Suffix (z.B. nvme0n1p3).
+# Spiegelt part_prefix() aus install-debian.sh, damit DATA_DEV korrekt
+# zusammengesetzt wird (nicht /dev/nvme0n1<N> sondern /dev/nvme0n1p<N>).
+part_prefix() {
+    local disk="$1"
+    if [[ "$disk" == *nvme* ]] || [[ "$disk" == *mmcblk* ]] || [[ "$disk" == *nbd* ]]; then
+        echo "${disk}p"
+    else
+        echo "$disk"
+    fi
+}
+
 # -- Checks ------------------------------------------------------------------
 
 [[ $EUID -ne 0 ]] && fatal "Must be run as root."
@@ -56,11 +68,14 @@ done
 
 # -- Root-Partition und Disk ermitteln --------------------------------------
 
-ROOT_DEV=$(findmnt -n -o SOURCE / | sed 's/\[.*//')   # z.B. /dev/vda2
-DISK_DEV=$(echo "$ROOT_DEV" | sed 's/[0-9]*$//')       # z.B. /dev/vda
-ROOT_PARTNUM=$(echo "$ROOT_DEV" | grep -o '[0-9]*$')   # z.B. 2
+ROOT_DEV=$(findmnt -n -o SOURCE / | sed 's/\[.*//')      # z.B. /dev/vda2 oder /dev/nvme0n1p2
+# Optionalen "p"-Partitionstrenner MIT abstreifen, sonst bleibt bei NVMe/eMMC
+# ein ungueltiges /dev/nvme0n1p stehen (vda2->vda, nvme0n1p2->nvme0n1).
+DISK_DEV=$(echo "$ROOT_DEV" | sed -E 's/p?[0-9]+$//')    # z.B. /dev/vda bzw. /dev/nvme0n1
+ROOT_PARTNUM=$(echo "$ROOT_DEV" | grep -o '[0-9]*$')     # z.B. 2
 DATA_PARTNUM=$(( ROOT_PARTNUM + 1 ))
-DATA_DEV="${DISK_DEV}${DATA_PARTNUM}"
+# Partitionstrenner ("p" bei NVMe/eMMC/NBD) beim Zusammensetzen wieder anfuegen.
+DATA_DEV="$(part_prefix "$DISK_DEV")${DATA_PARTNUM}"
 
 # -- Helfer: @data anlegen falls fehlend, mounten, in fstab eintragen -------
 

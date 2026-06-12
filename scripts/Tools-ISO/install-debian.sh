@@ -338,16 +338,20 @@ RUNTIMEEOF
                 if mountpoint -q /data; then
                     log "Data partition mounted: /data"
                 else
-                    warn "Data partition could not be mounted: $data_dev"
+                    fatal "Data partition could not be mounted: $data_dev\nAgent install would write files into the root FS that would be shadowed by /data after reboot.\nCheck the partition (blkid, btrfs subvolume list) and run the script again."
                 fi
             else
-                warn "Partition $data_dev is not btrfs — data partition skipped"
+                fatal "Partition $data_dev is not btrfs (fstype='$data_fstype').\nAgent install would write files into the root FS that would be shadowed after reboot.\nCreate the data partition correctly (see create-data-partition.sh) and run the script again."
             fi
         else
-            warn "No data partition found — skipped"
-            warn "Create one manually with: bash create-data-partition.sh"
+            fatal "No data partition found (neither ${disk_dev}3 nor label 'Daten').\nAgent install would write files into the root FS that would be shadowed after reboot.\nCreate it manually: bash create-data-partition.sh, then run the script again."
         fi
     fi
+
+    # Sanity-Check: ohne /data ist der gesamte Agent-State (Token, Cert,
+    # Binary, Updates) im Reboot weg. Lieber jetzt abbrechen als spaeter
+    # mit unverstaendlichen Heartbeat-Fehlern dastehen.
+    mountpoint -q /data || fatal "/data not mounted — aborting before agent install."
 
     # ── Zusaetzliche Pakete ──────────────────────────────────────────
 
