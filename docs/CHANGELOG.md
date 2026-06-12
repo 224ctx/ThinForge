@@ -2,6 +2,16 @@
 
 ## 2026-06-12
 
+- **Zuverlässigere Geräte-Aktionen und Rollouts** — Mehrere selten auftretende Fehler wurden behoben: Geräte-Befehle (z. B. Neustart) konnten in ungünstigem Timing doppelt ausgeführt werden; ein gestufter Rollout konnte hängen bleiben, wenn das gewählte Abbild noch nicht fertig gebaut war; das Abbrechen eines Rollouts konnte ein gerade startendes Gerät fälschlich als abgebrochen markieren. Diese Abläufe sind jetzt abgesichert. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Geräte-Updates lassen kein Rollback-Abbild mehr verlieren** — In seltenen Fällen konnte die automatische Aufräumung alter Systemstände den Stand der aktuell laufenden Version löschen, wodurch das nächste Update fehlschlug und eine vollständige Neuinstallation nötig wurde. Der laufende Stand ist jetzt geschützt, und beim Löschen eines Standes werden auch die zugehörigen Home-Daten mit entfernt (keine verwaisten Reste mehr). Wirkt nach Aktualisierung der Client-Agenten.
+
+- **Abbruch während der ersten Update-Phase wird korrekt angezeigt** — Wurde ein Update-Klon während der ersten Phase abgebrochen, meldete die Oberfläche fälschlich „abgebrochen" und blieb stehen. Der Fortschritt läuft jetzt sichtbar weiter, bis die laufende Phase sauber endet. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Zertifikats-Austausch hinterlässt nie ein unpassendes Schlüsselpaar** — Beim Hochladen eines eigenen TLS-Zertifikats konnte ein Fehler im letzten Schritt Zertifikat und Schlüssel inkonsistent zurücklassen. Schlägt der Austausch fehl, wird jetzt automatisch auf das vorherige, funktionierende Paar zurückgesetzt. Wirkt nach Aktualisierung der Server-Dienste.
+
+- **Netzwerk-Adresse wird nicht mehr versehentlich entfernt** — Beim erneuten Setzen der Server-Adresse konnte eine ähnliche Bestandsadresse falsch erkannt werden, was die Netzwerkkarte adresslos zurücklassen konnte. Die Adress-Erkennung ist jetzt exakt. Wirkt nach Aktualisierung der Server-Dienste.
+
 - **Aussagekräftige Fehlermeldungen in der Verwaltungsoberfläche** — Bisher zeigte die Oberfläche bei vielen Fehlern nur den allgemeinen Hinweis „An error occurred", auch wenn z. B. die Verbindung zum Server gestört war. Fehlermeldungen nennen jetzt die konkrete Ursache: Server nicht erreichbar, Zeitüberschreitung, fehlende Berechtigung, nicht gefundene Ressource u. a. — in der jeweils eingestellten Sprache. Bei einer Verbindungsstörung wiederholen sich die Hinweise außerdem nicht mehr im Sekundentakt. Zusätzlich wird das Aktivieren eines Lager-Geräts am Lizenz-Limit jetzt mit einer klaren Meldung abgelehnt, statt ohne Rückmeldung zu scheitern. Wirkt nach Aktualisierung der Server-Dienste.
 
 - **Client-Agent: Update-Signatur wird vor dem Einspielen erzwungen** — Beim Anwenden eines Betriebssystem-Updates auf dem Client wurde die Signaturprüfung in einem Sonderfall (fehlende Signaturdatei) stillschweigend übersprungen, statt das Update abzulehnen. Außerdem werden die Update-Beschreibungsdaten jetzt streng auf gültige Form geprüft. Beides verhindert, dass manipulierte Update-Daten eingespielt werden. Wirkt nach Aktualisierung der Client-Agenten.
