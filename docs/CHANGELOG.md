@@ -1,5 +1,9 @@
 # ThinForge Changelog
 
+## 2026-06-19
+
+- **Dashboard: direkte Verknüpfung zu den passenden Berichten** — Die Metrik-Kacheln auf dem Dashboard erhalten oben rechts ein kleines Diagramm-Symbol, das direkt den passenden Bericht öffnet: *Speicher* → Speicher-Bericht, *Client-Status* → Verfügbarkeit, *Lizenz* → Lizenz, *Aktive Alarme* → Störungen, *Rollouts* → Deployments, *Aktivität* → Tasks, *Compliance* → Compliance. Die bisherigen Verknüpfungen (z. B. zu den Einstellungen, Gruppen oder Rollouts) bleiben daneben erhalten. Wirkt nach Aktualisierung der Verwaltungsoberfläche.
+
 ## 2026-06-18
 
 - **Berichte: interne Überarbeitung, Bedienung verbessert** — Die Berichtssektion wurde technisch neu strukturiert (gleiche Inhalte, Tabs und Diagramme wie zuvor). Spürbar: der *Aktualisieren*-Knopf lädt jetzt gezielt den gerade geöffneten Bericht neu; der *Speicher*-Bericht blockiert beim Einlesen der Datenträger den Server nicht mehr; und eine Aktualisierung der Server-Dienste läuft auch dann sauber durch, wenn in der Datenbank Altbestände mit Doppelwerten liegen (keine Neustart-Endlosschleife mehr). Wirkt nach Aktualisierung der Server-Dienste und der Verwaltungsoberfläche.
