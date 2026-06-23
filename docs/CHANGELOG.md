@@ -2,6 +2,8 @@
 
 ## 2026-06-23
 
+- **Einheitlicher Grauton für ausgeklappte Detailbereiche** — Ausgeklappte Detailbereiche (etwa die Liste der noch ausstehenden Clients eines Klons im Tab *Klone*) und einige Übersichtsflächen hatten im dunklen Erscheinungsbild einen fast weißen Hintergrund, der sich unschön abhob. Sie verwenden jetzt überall denselben, zum Design passenden Grauton — sowohl im dunklen als auch im hellen Erscheinungsbild. Wirkt nach Aktualisierung der Verwaltungsoberfläche.
+
 - **Sitzungsdauer wirkt jetzt tatsächlich** — Die Einstellung *Einstellungen → Allgemein → Sitzungsdauer* hatte bisher keine Wirkung: Sitzungen liefen unabhängig vom gewählten Wert erst nach sieben Tagen Inaktivität ab, und ein Neustart des Rechners beendete die angemeldete Sitzung nicht. Ab dieser Aktualisierung steuert der eingestellte Wert die Sitzung wirklich, als gleitendes Zeitfenster: Nach der gewählten Dauer **ohne Aktivität** ist eine erneute Anmeldung erforderlich, aktive Nutzung verlängert das Fenster fortlaufend. Die Änderung gilt für neue Anmeldungen und greift bei bestehenden Sitzungen mit der nächsten automatischen Erneuerung (spätestens nach rund 15 Minuten Aktivität). Wirkt nach Aktualisierung der Server-Dienste (Backend) und der Verwaltungsoberfläche.
 
 ## 2026-06-22
