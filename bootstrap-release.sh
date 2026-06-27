@@ -54,10 +54,31 @@ echo "[2/3] Running install-deps.sh..."
 # ---------------------------------------------------------------------------
 # 3. Pull images + start the stack. The Gitea container registry is
 #    anonymous-readable for the thinforge/* packages — docker pull just works.
+#
+#    Fresh-host gotcha: install-deps.sh just added this user to the `docker`
+#    group, but that membership is NOT active in the already-running shell
+#    (usermod needs a fresh login). Running deploy.sh directly would then fail
+#    with "permission denied ... /var/run/docker.sock". If the socket is not
+#    reachable yet but the user IS a member of the docker group per the system
+#    database, re-exec the deploy under `sg docker` so no logout/login is needed.
 # ---------------------------------------------------------------------------
 echo ""
 echo "[3/3] Pulling images and starting the stack..."
-./deploy.sh
+
+_tf_user="$(id -un)"
+if docker info >/dev/null 2>&1; then
+  # Docker socket already reachable in this session.
+  ./deploy.sh
+elif command -v sg >/dev/null 2>&1 && id -nG "$_tf_user" 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
+  # User is in the docker group per the system DB but this shell predates that
+  # change — activate the group for the deploy without a full re-login.
+  echo "    Note: activating the freshly-assigned 'docker' group via sg (no re-login needed)..."
+  sg docker -c "cd '$TARGET_DIR' && ./deploy.sh"
+else
+  # Not in the docker group, or the daemon is down — run anyway so deploy.sh
+  # surfaces its own clear error.
+  ./deploy.sh
+fi
 
 echo ""
 echo "============================================"
