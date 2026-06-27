@@ -112,7 +112,7 @@ Each distribution of ThinForge (source repository, Release repository, container
 
 - **Copyright holder (proprietary parts):** Andreas Christ (info@thinforge.org)
 - **License inquiries and source requests:** info@thinforge.org
-- **Project repository:** https://git.example.com/thinforge/ThinForge
+- **Project repository:** https://git.thinforge.org/thinforge/ThinForge
 
 ---
 

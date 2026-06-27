@@ -1,6 +1,6 @@
 # ThinForge — Release Repository
 
-Dieses Repo enthält alles, was ein Kunden-Host zum Betrieb von ThinForge braucht — **außer dem Quellcode**. Container-Images werden aus der Gitea-Registry gezogen; die Dateien hier werden zur Laufzeit in die Container gebindmountet oder von `deploy.sh` ausgewertet.
+Dieses Repo enthält alles, was ein Host zum Betrieb von ThinForge braucht — **außer dem Quellcode**. Container-Images werden aus der Gitea-Registry gezogen; die Dateien hier werden zur Laufzeit in die Container gebindmountet oder von `deploy.sh` ausgewertet.
 
 | Pfad | Zweck |
 |---|---|
@@ -19,14 +19,14 @@ Dieses Repo enthält alles, was ein Kunden-Host zum Betrieb von ThinForge brauch
 | `docs/security/`, `docs/CHANGELOG.md` | Werden vom Backend/Frontend RO gemountet |
 | `anleitungen/` | Operator-Doku (DE + EN): Dashboard, Clients, Cloning, Rollouts, Netzwerk, Einstellungen |
 
-Der Quellcode liegt separat in `thinforge/ThinForge` (private Source-Repo). Dieses Release-Repo ist **öffentlich** — Kunden brauchen keinen Gitea-Zugang zum Klonen.
+Der Quellcode liegt separat in `thinforge/ThinForge` (private Source-Repo). Dieses Release-Repo ist **öffentlich** — zum Klonen ist kein Gitea-Zugang nötig.
 
 ---
 
 ## Voraussetzungen
 
 - Ubuntu 24.04 (oder neuer) mit sudo-Zugriff
-- Netzwerk: ausgehender HTTPS-Zugang zu `git.example.com`
+- Netzwerk: ausgehender HTTPS-Zugang zu `git.thinforge.org`
 
 Dieses Repo und die zugehörigen Container-Images sind **öffentlich lesbar** — kein Gitea-Account, kein PAT, kein `docker login` nötig.
 
@@ -35,7 +35,7 @@ Dieses Repo und die zugehörigen Container-Images sind **öffentlich lesbar** �
 ## Schnellstart
 
 ```bash
-curl -fsSL https://git.example.com/thinforge/ThinForge-Release/raw/branch/master/bootstrap-release.sh -o bootstrap-release.sh
+curl -fsSL https://git.thinforge.org/thinforge/ThinForge-Release/raw/branch/master/bootstrap-release.sh -o bootstrap-release.sh
 chmod +x bootstrap-release.sh
 ./bootstrap-release.sh
 ```
@@ -53,7 +53,7 @@ Nach dem Abschluss ist das Web-UI unter `https://<hostname>/` erreichbar. Der **
 ## Manueller Ablauf (wenn du den Bootstrap-Skript-Call vermeiden willst)
 
 ```bash
-git clone https://git.example.com/thinforge/ThinForge-Release.git ~/ThinForge-Release
+git clone https://git.thinforge.org/thinforge/ThinForge-Release.git ~/ThinForge-Release
 cd ~/ThinForge-Release
 ./install-deps.sh            # materialisiert .env, installiert Docker etc.
 ./deploy.sh
@@ -63,7 +63,7 @@ Falls nach `install-deps.sh` die Gruppenmitgliedschaft für `docker` neu ist, bi
 
 ---
 
-## .env — was der Kunde anpassen kann
+## .env-Konfiguration
 
 `install-deps.sh` füllt die Pflicht-Secrets (Postgres-/Grafana-/Semaphore-Passwort) mit `openssl rand`-Werten. Alles andere läuft mit Defaults.
 
@@ -87,7 +87,7 @@ Nicht anfassen (werden auto-generiert / auto-verwaltet):
 
 ## Re-Deploy nach Image-Update
 
-Dev drückt neue Images → auf dem Kunden-Host:
+Dev drückt neue Images → auf dem Host:
 
 ```bash
 cd ~/ThinForge-Release
@@ -112,15 +112,15 @@ Das Backend serviert `agent-go/bin/thinforge-agent-amd64` (+ `.minisig`) an PXE-
 1. Neue Binary + Minisig + Version aus einem Dev-Build (`scripts/build-and-sign.sh` im Source-Repo) in `agent-go/bin/` ablegen.
 2. `agent-version` auf die neue Version aktualisieren.
 3. `git commit -am "agent: bump vX.Y.Z"` + `git push`.
-4. Auf dem Kunden-Host: `git pull`. Das Backend liest die Datei on-demand bei jedem Agent-Download-Request (`/api/klon/agent-binary`) — die neue Binary ist beim nächsten Client-Boot aktiv, ohne Container-Restart.
+4. Auf dem Host: `git pull`. Das Backend liest die Datei on-demand bei jedem Agent-Download-Request (`/api/klon/agent-binary`) — die neue Binary ist beim nächsten Client-Boot aktiv, ohne Container-Restart.
 
 ---
 
 ## Registry-Zugriff
 
-Die Gitea-Registry hinter `git.example.com` serviert via HTTPS auf 443 — **kein `insecure-registries`-Eintrag, kein `docker login` nötig**. Die `thinforge/*`-Container-Packages sind als public markiert; Docker holt sich selbstständig einen anonymen Bearer-Token (`/v2/token?service=container_registry`) und pullt durch. `deploy.sh` macht dementsprechend keinen Login-Precheck.
+Die Gitea-Registry hinter `git.thinforge.org` serviert via HTTPS auf 443 — **kein `insecure-registries`-Eintrag, kein `docker login` nötig**. Die `thinforge/*`-Container-Packages sind als public markiert; Docker holt sich selbstständig einen anonymen Bearer-Token (`/v2/token?service=container_registry`) und pullt durch. `deploy.sh` macht dementsprechend keinen Login-Precheck.
 
-Wenn ein Package später privat geschaltet werden soll, kommt ein `docker login git.example.com` mit Gitea-PAT (Scope `read:package`) an — bis dahin nicht nötig.
+Wenn ein Package später privat geschaltet werden soll, kommt ein `docker login git.thinforge.org` mit Gitea-PAT (Scope `read:package`) an — bis dahin nicht nötig.
 
 ---
 
@@ -149,6 +149,6 @@ Konkret heißt das:
 
 ## Support & Weiterführend
 
-- Source, Issues, Roadmap: https://git.example.com/thinforge/ThinForge *(privat, Gitea-Zugang nötig)*
+- Source, Issues, Roadmap: https://git.thinforge.org/thinforge/ThinForge *(privat, Gitea-Zugang nötig)*
 - Operator-Doku DE: [`anleitungen/DE/`](anleitungen/DE/README.md)
 - Operator-Doku EN: [`anleitungen/EN/`](anleitungen/EN/README.md)

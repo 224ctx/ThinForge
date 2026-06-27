@@ -18,7 +18,7 @@ Menü → **Einstellungen** → Tab **Lizenz** (Admin).
 
 Die Statuskarte zeigt:
 
-- **Kundendaten** (Name, Kundennummer, Ablaufdatum).
+- **Lizenzdaten** (Lizenzinhaber, Lizenznummer, Ablaufdatum).
 - **Aktive Clients** gegen das Limit als Fortschrittsbalken — farblich gekennzeichnet:
   - grün bei unter 90 %,
   - orange ab 90 %,

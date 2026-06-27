@@ -72,7 +72,7 @@ echo " Storage: $STORAGE_DIR"
 echo "============================================"
 
 echo ""
-echo "[1/4] Pulling images from git.example.com/thinforge/*..."
+echo "[1/4] Pulling images from git.thinforge.org/thinforge/*..."
 "${COMPOSE_CMD[@]}" "${PROFILE_FLAGS[@]}" pull
 
 # Backend-Services rufen einige Images noch mit Short-Name auf
@@ -81,7 +81,7 @@ echo "[1/4] Pulling images from git.example.com/thinforge/*..."
 # die Short-Names nicht, nur die Registry-qualifizierten Tags. Alias-Tag setzen,
 # damit 'docker run thinforge-cloner' ohne Registry-Query landet.
 for img in backend worker frontend bt-seeder cloner cloning-vm chrony dnsmasq multicast-sender nfs-server netbird; do
-  docker tag "git.example.com/thinforge/thinforge-${img}:latest" "thinforge-${img}:latest" 2>/dev/null || true
+  docker tag "git.thinforge.org/thinforge/thinforge-${img}:latest" "thinforge-${img}:latest" 2>/dev/null || true
 done
 
 if [ "$PULL_ONLY" = "1" ]; then

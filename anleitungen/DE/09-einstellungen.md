@@ -130,7 +130,7 @@ Erzeugt einen Snapshot des ThinForge-Zustands (Postgres-Dump + Secrets + Konfig-
 
 Reißt den gesamten ThinForge-Zustand ab: Postgres-Tabellen, Redis, Storage-Dir, Secrets. **Nicht rückgängig zu machen.** Doppelte Bestätigung erforderlich.
 
-Einsatzfall: Test-Server zurück auf Auslieferungszustand, bevor dieser an Kunden geht.
+Einsatzfall: Test-Server zurück auf Auslieferungszustand, bevor dieser ausgeliefert wird.
 
 ## Nächste Schritte
 

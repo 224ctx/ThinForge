@@ -22,11 +22,11 @@ b5ebae1dd3763d8dc719835e46c4517419692f66e7748050faab38f8761d4719  partclone-0.3.
 
 ## Not shipped — pointer-only (no source tarball here)
 
-ThinForge does **not** ship binaries for the following components. They are downloaded / built at the customer site or referenced only. GPL §3 source-with-binary obligations do not apply to ThinForge for these.
+ThinForge does **not** ship binaries for the following components. They are downloaded / built on the ThinForge server at install time, or referenced only. GPL §3 source-with-binary obligations do not apply to ThinForge for these.
 
 | Component | Why no source here |
 |-----------|--------------------|
-| **Clonezilla Live** | Customer downloads the ISO from SourceForge at install time via the ThinForge UI. ThinForge is a downloader / orchestrator, not a distributor of Clonezilla binaries. The ISO itself contains its own source. Upstream: https://clonezilla.org/ |
+| **Clonezilla Live** | The ThinForge server downloads the ISO from SourceForge at install time via the ThinForge UI. ThinForge is a downloader / orchestrator, not a distributor of Clonezilla binaries. The ISO itself contains its own source. Upstream: https://clonezilla.org/ |
 | **DRBL** | Not installed into any ThinForge container image. Only referenced in documentation / architecture. Upstream: https://drbl.org/ |
 | **Alpine base packages** (`btrfs-progs`, `dnsmasq`, `qemu-img`, `util-linux`, `udpcast`, …) | Installed via `apk add` from Alpine community / main. Unmodified upstream packages. Source: https://pkgs.alpinelinux.org/packages and https://gitlab.alpinelinux.org/alpine/aports |
 

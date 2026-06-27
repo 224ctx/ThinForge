@@ -103,7 +103,7 @@ Creates a snapshot of the ThinForge state (Postgres dump + secrets + config file
 
 Tears down the entire ThinForge state: Postgres tables, Redis, storage dir, secrets. **Not reversible.** Double confirmation required.
 
-Use case: a test server back to factory state before handover to a customer.
+Use case: a test server back to factory state before redeployment.
 
 ## Next steps
 

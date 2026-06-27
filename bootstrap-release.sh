@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-GITEA_HOST="${GITEA_HOST:-git.example.com}"
+GITEA_HOST="${GITEA_HOST:-git.thinforge.org}"
 TARGET_DIR="${TARGET_DIR:-$HOME/ThinForge-Release}"
 
 echo "============================================"

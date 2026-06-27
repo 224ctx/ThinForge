@@ -5,7 +5,7 @@
 # Erst-Deploy auf neuen Hosts.
 #
 # Voraussetzungen:
-#   1. docker login git.example.com -u <user> (einmal pro Host)
+#   1. docker login git.thinforge.org -u <user> (einmal pro Host)
 #      HTTPS auf Standardport — kein insecure-registries-Eintrag nötig.
 #   2. Das Repo ist trotzdem geklont — Volumes wie ./ansible, ./scripts,
 #      ./docker/grafana/provisioning, etc. werden weiterhin in Container
@@ -21,7 +21,7 @@ name: thinforge
 # Anchor für alle Bridge-Network-Services: neutralisiert die search-domain
 # aus host /etc/resolv.conf. Sonst expandiert Docker's embedded DNS jeden
 # Container-Namen ohne Punkt (`backend`, `redis`, ...) via search-domain
-# und resolved auf einen externen Wildcard-CNAME (z. B. *.example.com
+# und resolved auf einen externen Wildcard-CNAME (z. B. *.thinforge.org
 # → 203.0.113.10) STATT auf die Container-IP. Folge: Caddy → 502 backend
 # unreachable, Backend → kein Redis, etc. Setzt search auf `.` (root) →
 # Docker-DNS kann Container-Hostnamen direkt aufloesen, vollstaendig dynamisch.
@@ -80,7 +80,7 @@ services:
       com.thinforge.icon: "mdi-api"
       com.thinforge.critical: "true"
     <<: *no-search-domain
-    image: git.example.com/thinforge/thinforge-backend:latest
+    image: git.thinforge.org/thinforge/thinforge-backend:latest
     command: ["thinforge-api"]
     # Bind to 127.0.0.1 only — Caddy:80 reverse-proxiet /api/* fuer
     # PXE-Clients (HTTP, kein TLS-Trust). See F-CR-06.
@@ -106,7 +106,7 @@ services:
       THINFORGE_ACCEPTANCE_LIST_MODE: ${THINFORGE_ACCEPTANCE_LIST_MODE:-local}
       THINFORGE_ACCEPTANCE_LIST_URL: ${THINFORGE_ACCEPTANCE_LIST_URL:-}
       THINFORGE_KEV_URL: ${THINFORGE_KEV_URL:-}
-      # Agent-Build im Backend deaktiviert — der Kunde nutzt nur die
+      # Agent-Build im Backend deaktiviert — es wird nur die
       # in agent-go/bin/ ausgelieferte, vorsignierte Binary. POST /agent/build
       # liefert dann 403, und der First-Login-Auto-Build-Trigger ist ein No-Op.
       THINFORGE_AGENT_BUILD_ENABLED: "false"
@@ -171,7 +171,7 @@ services:
       com.thinforge.label: "Worker"
       com.thinforge.icon: "mdi-cog-outline"
     <<: *no-search-domain
-    image: git.example.com/thinforge/thinforge-worker:latest
+    image: git.thinforge.org/thinforge/thinforge-worker:latest
     command: ["thinforge-worker"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -219,7 +219,7 @@ services:
       com.thinforge.label: "Frontend (Vue)"
       com.thinforge.icon: "mdi-web"
     <<: *no-search-domain
-    image: git.example.com/thinforge/thinforge-frontend:latest
+    image: git.thinforge.org/thinforge/thinforge-frontend:latest
     restart: unless-stopped
     volumes:
       - ./docs/CHANGELOG.md:/docs/CHANGELOG.md:ro
@@ -304,7 +304,7 @@ services:
     labels:
       com.thinforge.label: "dnsmasq (DHCP/PXE)"
       com.thinforge.icon: "mdi-lan"
-    image: git.example.com/thinforge/thinforge-dnsmasq:latest
+    image: git.thinforge.org/thinforge/thinforge-dnsmasq:latest
     restart: unless-stopped
     profiles:
       - network
@@ -360,7 +360,7 @@ services:
     labels:
       com.thinforge.label: "Chrony (NTP)"
       com.thinforge.icon: "mdi-clock-outline"
-    image: git.example.com/thinforge/thinforge-chrony:latest
+    image: git.thinforge.org/thinforge/thinforge-chrony:latest
     restart: unless-stopped
     profiles:
       - network
@@ -382,7 +382,7 @@ services:
     labels:
       com.thinforge.label: "NFS Server"
       com.thinforge.icon: "mdi-folder-network"
-    image: git.example.com/thinforge/thinforge-nfs-server:latest
+    image: git.thinforge.org/thinforge/thinforge-nfs-server:latest
     restart: unless-stopped
     profiles:
       - network
@@ -459,7 +459,7 @@ services:
 
 #   semaphore:
 #     <<: *no-search-domain
-#     image: git.example.com/thinforge/thinforge-semaphore:latest
+#     image: git.thinforge.org/thinforge/thinforge-semaphore:latest
 #     restart: unless-stopped
 #     ports:
 #       # Bind to 127.0.0.1 only — Semaphore is admin-internal (default-PW issue
@@ -495,7 +495,7 @@ services:
       com.thinforge.label: "Multicast-Sender"
       com.thinforge.icon: "mdi-multicast"
       com.thinforge.on_demand: "true"
-    image: git.example.com/thinforge/thinforge-multicast-sender:latest
+    image: git.thinforge.org/thinforge/thinforge-multicast-sender:latest
     profiles:
       - multicast
     network_mode: host
@@ -511,7 +511,7 @@ services:
       com.thinforge.icon: "mdi-progress-download"
       com.thinforge.on_demand: "true"
       com.thinforge.container_name: "thinforge-bt-seeder-service"
-    image: git.example.com/thinforge/thinforge-bt-seeder:latest
+    image: git.thinforge.org/thinforge/thinforge-bt-seeder:latest
     profiles:
       - bittorrent
     network_mode: host
@@ -521,7 +521,7 @@ services:
       com.thinforge.label: "Cloner (Clonezilla)"
       com.thinforge.icon: "mdi-content-duplicate"
       com.thinforge.on_demand: "true"
-    image: git.example.com/thinforge/thinforge-cloner:latest
+    image: git.thinforge.org/thinforge/thinforge-cloner:latest
     profiles:
       - cloner
     privileged: true
@@ -535,7 +535,7 @@ services:
       com.thinforge.label: "Cloning-VM (QEMU)"
       com.thinforge.icon: "mdi-desktop-classic"
       com.thinforge.on_demand: "true"
-    image: git.example.com/thinforge/thinforge-cloning-vm:latest
+    image: git.thinforge.org/thinforge/thinforge-cloning-vm:latest
     restart: "no"
     profiles:
       - testing
