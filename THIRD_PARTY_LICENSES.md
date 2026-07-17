@@ -2,7 +2,7 @@
 
 This document summarises the Free / Open Source Software (FOSS) components distributed with ThinForge, their licenses, and how to obtain the corresponding source code.
 
-> **Summary:** ThinForge is a commercial product. Its proprietary components (Rust backend, Go agent, TypeScript frontend) are distributed under the license in [`LICENSE`](LICENSE). ThinForge also ships unmodified third-party components licensed under the GNU General Public License, Version 2 (GPL v2). These GPL-licensed components remain under GPL v2 and are interacted with exclusively through process boundaries, not linking.
+> **Summary:** ThinForge is free software. Its own components (Rust backend, Go agent, TypeScript frontend, tooling) are licensed under the GNU General Public License, Version 3 or (at your option) any later version — see [`LICENSE`](LICENSE). ThinForge also ships unmodified third-party components licensed under the GNU General Public License, Version 2 (GPL v2). These components remain under GPL v2 and are interacted with exclusively through process boundaries, not linking — so each program stays under its own license.
 
 ## GPL v2 Components ThinForge Actually Distributes
 
@@ -32,7 +32,7 @@ The following components are **orchestrated** by ThinForge but their binaries ar
 | Clonezilla | runs as independent operating system, PXE-booted on client hardware | no | no |
 | EZIO | runs as separate daemon, addressed via gRPC over network socket | no | no |
 
-This separation means the GPL "derivative work" conditions of §2 do not extend to ThinForge's proprietary code, under the FSF interpretation and commonly-applied case law.
+This separation means the components remain independent works: the GPL-v2-only components (Partclone, EZIO) and the GPL-v3-licensed ThinForge code do not form a combined work, so the copyleft terms of each license apply only to the respective program. This matters because GPL v2 (only) and GPL v3 are mutually incompatible within a single combined work.
 
 ## Modifications
 
@@ -95,24 +95,24 @@ The table below lists every non-trivially-licensed package currently installed i
 | `wget` | GPL v3 | HTTP(S) client | dnsmasq |
 | `py3-libtorrent-rasterbar` | BSD-3-Clause | Python BitTorrent binding | bt-seeder |
 
-None of these are linked into the proprietary ThinForge binaries; all are invoked as separate processes or used via their own daemons.
+None of these are linked into the ThinForge binaries; all are invoked as separate processes or used via their own daemons.
 
 ## License Files Bundled With the Release
 
 Each distribution of ThinForge (source repository, Release repository, container images, installation media) includes:
 
-- `LICENSE` — ThinForge's own license (proprietary, with explicit carve-outs listing the GPL components above).
+- `LICENSE` — ThinForge's own license: the GNU GPL v3 (ThinForge components are licensed GPL-3.0-or-later).
 - `NOTICE` — short notice of bundled FOSS.
 - `THIRD_PARTY_LICENSES.md` — this file.
-- `LICENSES/` — directory containing `GPL-2.0.txt` and per-component metadata.
+- `LICENSES/` — directory containing `GPL-2.0.txt`, `GPL-3.0.txt` and per-component metadata.
 - `WRITTEN_OFFER.md` — written offer for source code per GPL v2 §3(b).
 - `sources/` — corresponding source tarballs for every GPL binary ThinForge distributes (with pinned SHA-256).
 
 ## Contact
 
-- **Copyright holder (proprietary parts):** Andreas Christ (info@thinforge.org)
+- **Copyright holder (ThinForge components):** Andreas Christ (info@thinforge.org)
 - **License inquiries and source requests:** info@thinforge.org
-- **Project repository:** https://git.thinforge.org/thinforge/ThinForge
+- **Project repository:** https://git.thinforge.org/thinforge/ThinForge-Dev
 
 ---
 

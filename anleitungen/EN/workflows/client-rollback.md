@@ -15,7 +15,7 @@ Fast, directly from the detail page.
 
 1. **Clients → Client detail** ([03](../03-clients.md))
 2. Tab **Actions** → **"Rollback"**
-3. Confirmation dialog says: *"This client will be rolled back to `v1.003` (current: `v1.004`). Continue?"*
+3. Confirmation dialog says: *"This client will be rolled back to `v2026.06.22-004` (current: `v2026.06.22-005`). Continue?"*
 4. Confirm
 
 What happens:

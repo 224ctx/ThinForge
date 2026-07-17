@@ -52,7 +52,7 @@ In the VNC window a regular shutdown (e.g. `sudo poweroff`). The cloning VM view
 1. **Cloning → Captures** ([05](../05-cloning.md#tab-captures))
 2. Click **"Save update"**
 3. Dialog:
-   - **Version** — first release: `v1.000`
+   - **Version** — first release: `v2026.06.22-001`
    - **Comment** — "initial baseline, Debian 12 with kiosk software"
    - **"As new baseline"** — **enable the checkbox** (baseline mode)
 4. **Start**
@@ -63,7 +63,7 @@ The capture runs (10–30 min depending on disk size). Progress:
 
 ## Step 6 — Clone appears
 
-After completion switch to the **Cloning → Clones** tab. The new entry `v1.000` is shown as **baseline** (root of the chain). Metadata, size, comment are visible.
+After completion switch to the **Cloning → Clones** tab. The new entry `v2026.06.22-001` is shown as **baseline** (root of the chain). Metadata, size, comment are visible.
 
 ## Step 7 — Test rollout
 

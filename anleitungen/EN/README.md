@@ -44,10 +44,10 @@ This manual is for **IT administrators** who operate ThinForge through the web i
 | Term | Meaning |
 |------|---------|
 | **Thin Client** | Physical endpoint (PC, laptop) running a ThinForge-managed OS image |
-| **Clone** | A stored disk image with a version number (e.g. `v1.003`), deployed to thin clients |
+| **Clone** | A stored disk image with a version number (e.g. `v2026.06.22-004`), deployed to thin clients |
 | **Capture** | The action of extracting a disk image from a running cloning VM |
 | **Baseline** | The first version of a clone chain (`vX.000`), a complete image without a delta parent |
-| **Delta update** | Incremental update from the previous clone to a new version (e.g. `v1.003 → v1.004`) |
+| **Delta update** | Incremental update from the previous clone to a new version (e.g. `v2026.06.22-004 → v2026.06.22-005`) |
 | **Rollout** | Distribution of a clone to a list or group of thin clients |
 | **Agent** | Small service on each thin client, handling heartbeat, updates, and remote commands |
 | **Cloning VM** | Virtual machine on the server, used to install and modify the base OS |

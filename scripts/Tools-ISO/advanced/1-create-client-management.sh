@@ -10,7 +10,7 @@
 # server.crt, signing-pubkey, agent-binary, alle Apply-Skripte). Der frühere
 # curl|bash-Bootstrap-Modus über die öffentliche API wurde entfernt — er
 # leakte das geteilte Heartbeat-Token und das Trust-Anchor-Material an
-# jeden LAN-Host. Siehe docs/security-audit-2026-04-18.md F-CR-01 + F-CR-05.
+# jeden LAN-Host. Siehe docs/security/security-audit-2026-04-18.md F-CR-01 + F-CR-05.
 #
 # Installiert:
 #   - SSH Public Key des Servers (für Ansible-Zugriff nach Deployment)

@@ -52,7 +52,7 @@ Im VNC-Fenster regulär Shut-Down (z. B. `sudo poweroff`). Die Cloning-VM-Ansich
 1. **Cloning → Captures** ([05](../05-cloning.md#tab-captures))
 2. **„Save Update"** klicken
 3. Dialog:
-   - **Version** — erstes Release: `v1.000`
+   - **Version** — erstes Release: `v2026.06.22-001`
    - **Kommentar** — „Initial Baseline, Debian 12 mit Kiosk-Software"
    - **„Als neue Basis"** — **Checkbox aktivieren** (Baseline-Modus)
 4. **Starten**
@@ -63,7 +63,7 @@ Der Capture läuft (10–30 Min je nach Disk-Größe). Fortschritt:
 
 ## Schritt 6 — Clone erscheint
 
-Nach Abschluss wechselst du zum Tab **Cloning → Clones**. Der neue Eintrag `v1.000` steht als **Baseline** (Root der Kette). Metadaten, Größe, Kommentar sind sichtbar.
+Nach Abschluss wechselst du zum Tab **Cloning → Clones**. Der neue Eintrag `v2026.06.22-001` steht als **Baseline** (Root der Kette). Metadaten, Größe, Kommentar sind sichtbar.
 
 ## Schritt 7 — Test-Rollout
 

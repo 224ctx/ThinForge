@@ -24,41 +24,44 @@ The **Tasks** entry shows all background jobs the server is currently processing
 
 | Column | Meaning |
 |--------|---------|
+| Client / Description | affected client or task description |
 | Type | task class (capture, update, deploy, playbook, …) |
-| Status | `pending`, `running`, `completed`, `failed`, `cancelled` |
-| Target | client, clone, or system |
-| Started | when |
+| Status | `pending`, `running`, `completed`, `failed`, `cancelled` — running tasks include an embedded progress bar |
+| Created | when the task was created |
 | Duration | running / total time |
-| Progress | % or stage indicator |
+| Error | error text for failed tasks |
 
 ### Filter
 
-- **Status chips** at the top — only running / only failed / only completed
-- **Text search** — target name, task ID
-- **Timeframe** — today / this week / last month
+- **Status** — dropdown across all statuses (`pending`, `running`, `completed`, `failed`, `cancelled`)
+- **Type** — dropdown to select the task class
+- **Text search** — by client or description name
 
-### Detail
+### Actions
 
-Clicking a task opens the detail:
+Tasks are managed directly in the table — there is no separate detail view. Each row offers icon actions depending on the status:
 
-- **Logs** — live output (when `running`) or complete trace
-- **Parameters** — arguments the task was started with
-- **Event list** — milestones (started, stage X reached, completed)
-- **Actions** — cancel (only when `running`), restart (when `failed`)
+- **Cancel** — for running or pending tasks
+- **Restart** — for failed or cancelled tasks
+- **Delete** — for completed tasks
+
+If a task fails, the error text appears directly in the "Error" column of its row.
 
 ### Typical daily use
 
 - After a rollout: "How many deploys are done?"
-- After a frontend snack error: look up the task ID from the message → full details
 - When a client has been quiet for a while: maybe a task for it is stuck and blocking it
 
 ---
 
 ## Logs
 
-**Logs** shows server-side logs of the ThinForge services. This is about things tasks (above) do not cover — e.g. internal backend errors, dnsmasq messages, Caddy access logs.
+**Logs** combines two views in two tabs:
 
-### Sources
+- **Audit log** — who changed what and when. A paginated table of write accesses, filterable by action and path.
+- **Container logs** — the logs of the ThinForge services. This is where things appear that tasks (above) do not cover — e.g. internal backend errors, dnsmasq messages, Caddy access logs.
+
+### Container logs: sources
 
 Dropdown at the top:
 
@@ -70,19 +73,9 @@ Dropdown at the top:
 - **VPN / WireGuard** — VPN handshakes and tunnel events
 - **Cloner / Cloning VM** — only when these containers are running
 
-### Filter
+### Container logs: display
 
-- **Level** — info, warn, error (or all)
-- **Timeframe** — default: last 30 min, adjustable
-- **Text search** — in the log message
-- **Live follow** — button top right, streams new lines live
-
-### Export
-
-- **As text** — raw log lines
-- **As CSV** — structured with timestamp/level/message columns
-
-Helpful for support tickets: filter the relevant window, export, attach to the ticket.
+The view shows the most recent lines of the selected service. A second selector controls how many lines are loaded (100, 200, 500 or 1000 — default 200). A button refreshes the output manually.
 
 ### When it's not enough
 

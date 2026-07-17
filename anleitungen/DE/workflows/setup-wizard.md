@@ -78,7 +78,7 @@ Fertige Installationen ohne Außenkontakt deaktivieren den Switch und versorgen 
 
 Wenn du frisch startest, ist dieser Schritt sinnvoll. Der Wizard erzeugt ein minisign-Ed25519-Paar und bettet den öffentlichen Schlüssel in die Tools-ISO ein. Ohne Key können später keine signierten Delta-Updates verteilt werden.
 
-Wer den Schritt überspringt, kann den Key jederzeit unter **Einstellungen → Sicherheit → Signing-Key** nachträglich erzeugen (siehe [12 — Sicherheit](12-sicherheit-und-cve-scan.md)).
+Wer den Schritt überspringt, kann den Key jederzeit unter **Einstellungen → Sicherheit → Signing-Key** nachträglich erzeugen (siehe [12 — Sicherheit](../12-sicherheit-und-cve-scan.md)).
 
 ## Schritt 6: TLS-Zertifikat
 

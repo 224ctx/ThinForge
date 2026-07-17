@@ -2,29 +2,31 @@
 
 The cloning area is the heart of ThinForge: this is where you create, maintain, and manage the disk images (clones) that are later distributed to thin clients.
 
-The view has **four tabs**: Cloning VM, ISOs, Captures, Clones. Each tab covers a step of the image lifecycle.
+The view has several tabs. The most important ones for the image lifecycle are **Create VM**, **ISOs**, **Captures** and **Clones**.
 
 ## Lifecycle overview
 
 ```
-1. Upload / download an ISO
+1. Create the base HD  (without this base disk layout, delta-update
+   functionality cannot be guaranteed)
        ↓
-2. Boot the cloning VM with the ISO
+2. Upload/download an ISO, boot the cloning VM with it
        ↓
-3. Install OS, set up agent, customise
+3. Install OS → for the restart: stop the VM, check the ISO is no
+   longer selected, start the VM → install the agent, customise
        ↓
-4. Capture → first image = baseline (v1.000)
+4. Create a delta update ("Save update delta & create clone")
+   → image (v2026.06.22-001)
        ↓
-5. Change: start VM, modify, "Save update"
+5. Later: start VM, modify, click "Save update delta" again
+   → v2026.06.22-002, v2026.06.22-003, ...
        ↓
-6. Delta capture → v1.001, v1.002, ...
-       ↓
-7. Rollout → clients pull the image ([06](06-rollouts.md))
+6. Rollout → clients pull the image ([06](06-rollouts.md))
 ```
 
 ---
 
-## Tab: Cloning VM
+## Tab: Create VM
 
 The cloning VM is a QEMU/KVM instance running on the server. It has a dedicated qcow2 disk that serves as the template for all later clones.
 
@@ -32,7 +34,7 @@ The cloning VM is a QEMU/KVM instance running on the server. It has a dedicated 
 
 A status bar at the top of the tab shows:
 
-- **Active** (green) — VM running, noVNC attached
+- **Active** (green) — VM running, console attached
 - **Inactive** (grey) — not started
 - **Starting / stopping** — transitional state
 
@@ -43,22 +45,21 @@ A status bar at the top of the tab shows:
 3. Confirm or adjust resources (RAM, CPUs, disk size)
 4. Start
 
-After 10–30 seconds the VM is bootable, the **"Open in VNC"** button becomes active.
+After 10–30 seconds the VM is bootable, the console becomes active.
 
-### VNC access
+### Console
 
-- Click **"Open in VNC"** — opens in-browser noVNC
-- Fullscreen possible, clipboard is passed through
+- The VM console is embedded directly in the tab; use **"Open in new tab"** to show it in its own window
+- The clipboard is passed through
 - The VM then behaves like an ordinary PC: click through the installer, set up software, let updates run
 
 ### Stopping
 
-- **"Stop VM"** — clean ACPI shutdown
-- **"Force stop"** — hard kill (when the VM hangs)
+- **"Stop VM"** — shuts the VM down
 
 ### Resources
 
-Default values (2 GB RAM, 2 CPUs, 60 GB disk) are enough for most Linux and Windows versions. Override via `.env` variables `CLONING_VM_RAM`, `CLONING_VM_CPUS`, `CLONING_VM_DISK_SIZE` (see [09 — Settings](09-settings.md)).
+The default values (RAM, CPUs, disk size) are enough for most Linux and Windows versions. You set RAM, CPUs and disk size per VM directly when starting it; the server-side defaults live in the server configuration, not in the Settings area of the interface.
 
 ---
 
@@ -83,47 +84,56 @@ Only possible when no active VM is using the ISO. Otherwise an error is shown wi
 
 ### Tools ISO
 
-A special entry, `thinforge-tools.iso`, is built automatically by the server. It contains the client provisioning script and is used for the **initial setup of a new thin client** via USB stick or PXE ([workflows/first-client.md](workflows/first-client.md)).
+The Tools ISO is built automatically by the server. It contains the client provisioning script and is used for the **initial setup of a new thin client** via USB stick or PXE ([workflows/first-client.md](workflows/first-client.md)).
 
-- **"Rebuild"** — re-creates it, e.g. after a certificate renewal or key rotation. Takes ~1 minute.
+The Tools ISO is rebuilt automatically every time the cloning VM starts. So after a certificate renewal or key rotation, you simply restart the VM.
+
+---
+
+## Create an image from the VM
+
+In the **Create VM** tab you save the VM state as a deployable image (the VM must be **stopped**). The dialog picks the right mode automatically.
+
+### Create baseline
+
+- Takes a baseline snapshot of the VM and starts a new version chain
+- Chosen automatically the first time (no clones yet); forceable any time via the **"As new baseline"** option
+- **When?** At the very start or for a clean new chain (e.g. after a major OS upgrade)
+
+### Save update delta & create clone
+
+- Creates a delta against the previous version **and** a complete, deployable clone image
+- Fast and small (only changed blocks in the delta)
+- **When?** For ongoing updates — security patches, config changes, new software
+
+### Creating an image
+
+1. The cloning VM must be **stopped** (otherwise an error)
+2. In the **Create VM** tab click **"Save update delta & create clone"**
+3. In the dialog:
+   - **Version** — assigned automatically in the format `vYYYY.MM.DD-NNN` (date plus a per-day counter per image line), e.g. `v2026.06.22-001`
+   - **Comment** — short note on what changed
+   - **"As new baseline"** — forces a fresh chain (baseline mode)
+4. Start
+
+The operation runs as a background task. Progress is visible here and in **Tasks** ([08](08-tasks-logs.md)). Depending on disk size a full image takes 10–30 minutes, a delta usually 1–5 minutes.
+
+### Cancel
+
+While the operation is running, a **"Cancel"** button appears. Cancelling cleans up half-produced files — the VM itself is not damaged.
 
 ---
 
 ## Tab: Captures
 
-The **capture** is the process of turning the VM state into a deployable image. Two kinds:
+The **Captures** tab, in contrast, captures the disk of a **physical client**: the device boots into a capture environment (Clonezilla) via PXE, and its disk state is saved as an image.
 
-### Baseline capture
-
-- Produces a full image (no delta parent)
-- Clears existing snapshots in the VM
-- Starts a new version chain: `v1.000`, `v2.000`, …
-
-**When?** At the very start or when you want a clean new chain (e.g. after a major OS upgrade).
-
-### Delta capture ("Save update")
-
-- Produces an incremental image against the previous version
-- Fast and small (only changed blocks)
-- Version is incremented: `v1.003` → `v1.004`
-
-**When?** For ongoing updates — security patches, config changes, new software.
-
-### Starting a capture
-
-1. The cloning VM must be **stopped** (otherwise an error)
-2. In tab **Captures** click **"Save update"**
-3. Dialog:
-   - **Version** — pre-filled (next number), can be overridden
-   - **Comment** — short note on what changed
-   - **"As new baseline"** — checkbox for baseline mode (produces `v<nextRoot>.000`)
+1. Pick the client
+2. Give the capture a name
+3. Decide whether the device **shuts down** or **reboots** afterwards
 4. Start
 
-The capture runs as a background task. Progress is visible here in the tab and in **Tasks** ([08](08-tasks-logs.md)). Depending on disk size a full capture takes 10–30 minutes, a delta usually 1–5 minutes.
-
-### Cancel a capture
-
-While the capture is running, a **"Cancel"** button appears. Cancelling cleans up half-produced files — the VM itself is not damaged.
+The operation runs as a background task; progress is visible in **Tasks** ([08](08-tasks-logs.md)).
 
 ---
 
@@ -136,26 +146,26 @@ The list of finished images, ready to be rolled out.
 Clones are shown hierarchically — baselines as roots, deltas as children:
 
 ```
-v1.000 (Baseline)
-├─ v1.001
-├─ v1.002
-├─ v1.003
-└─ v1.004    ← current "stable", latest update
+v2026.06.22-001 (Baseline)
+├─ v2026.06.22-002
+├─ v2026.06.22-003
+├─ v2026.06.22-004
+└─ v2026.06.22-005    ← current "stable", latest update
 
-v2.000 (Baseline)
-└─ v2.001
+v2026.06.23-001 (Baseline)
+└─ v2026.06.23-002
 ```
 
-Within a version trunk (e.g. all `v1.x`), updates are **flat** — `v1.001`, `v1.002`, `v1.003` are siblings under `v1.000`, not chained. This makes it easy to delete individual updates later without breaking the chain. If a clone with a broken `parent_id` ever appears (e.g. because the original source clone was deleted), ThinForge repairs the tree automatically the next time the Clones tab is opened.
+Within a chain the deltas are **flat** — they hang as siblings directly off the base (linked via `parent_id`, not by version number), not nested. This makes it easy to delete individual updates later without breaking the chain. If a clone with a broken `parent_id` ever appears (e.g. because the original source clone was deleted), ThinForge repairs the tree automatically the next time the Clones tab is opened.
 
-The **base** of a chain is the clone from which rollouts currently start — often the first, sometimes a later one (when older versions are archived).
+The **base** of a chain is determined automatically: it is the root of the version chain (the lowest version with no parent). It is shown as a marker.
 
 ### Per-clone actions
 
 - **Show details** — metadata (size, comment, created at, agent version at capture time)
-- **Set as base** — marks this clone as the chain start (rollouts begin here)
 - **Reassign / sort in** — moves the clone to a different position in the tree (see below)
-- **Export** — download as a tarball
+- **Restore** — writes the clone back onto the cloning VM. This lets you switch back to an older version at any time. Make sure the clients end up on the older version too — either via a new deployment or via the rollback (which can only restore the immediately previous version).
+- **Export** — download as a 7z archive
 - **Delete** — only if no clients use this version and no deltas depend on it
 
 ### Reassign / sort in

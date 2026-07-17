@@ -35,7 +35,7 @@ Sauberer Shutdown aus der VM. VM-Status geht auf „Inaktiv".
 
 1. **Cloning → Captures**
 2. **„Save Update"** → Dialog:
-   - **Version** — nächste Nummer, z. B. `v1.004` (wird meist automatisch vorgeschlagen)
+   - **Version** — nächste Nummer, z. B. `v2026.06.22-005` (wird meist automatisch vorgeschlagen)
    - **Kommentar** — knapp, was drin ist. Z. B. „Chromium 126, libssl CVE-Patch"
    - **„Als neue Basis"** — **nicht** aktivieren (wir wollen Delta, nicht Baseline)
 3. Starten
@@ -47,9 +47,9 @@ Capture läuft 1–5 Minuten. Delta wird gegen die Vorversion gebildet, landet i
 Zuerst auf wenige Test-Clients:
 
 1. **Rollouts → + Neuer Rollout** ([06](../06-rollouts.md))
-2. **Name**: `2026-04-15 Pilot — v1.004`
+2. **Name**: `2026-04-15 Pilot — v2026.06.22-005`
 3. **Ziel**: Client-Liste → die 1–3 Pilot-Clients auswählen
-4. **Image**: `v1.004`
+4. **Image**: `v2026.06.22-005`
 5. **Methode**: Unicast (einfach, wenige Clients)
 6. **Zeitplan**: Sofort starten
 7. Speichern
@@ -62,7 +62,7 @@ Minimum-Check-Liste:
 
 - [ ] Clients wurden neu gestartet und sind wieder Online
 - [ ] Agent läuft (`systemctl status thinforge-agent` im Terminal)
-- [ ] Version-Spalte zeigt `v1.004`
+- [ ] Version-Spalte zeigt `v2026.06.22-005`
 - [ ] Nutzer-seitig keine auffälligen Fehler (Applikationen starten, Netzwerk geht, Drucker geht)
 - [ ] Keine Fehlerspuren in Tasks ([08](../08-tasks-logs.md))
 
@@ -73,9 +73,9 @@ Minimum-Check-Liste:
 Wenn Pilot sauber läuft:
 
 1. **Rollouts → + Neuer Rollout**
-2. **Name**: `2026-04-15 Breitband — v1.004`
+2. **Name**: `2026-04-15 Breitband — v2026.06.22-005`
 3. **Ziel**: Gruppe (z. B. „Filiale Nord", „alle Kassen")
-4. **Image**: `v1.004`
+4. **Image**: `v2026.06.22-005`
 5. **Methode**:
    - **Multicast** wenn alle im gleichen LAN → schnell, bandbreiten-freundlich
    - **BitTorrent** wenn über VPN / mehrere Standorte → Clients teilen sich Daten
@@ -102,7 +102,7 @@ Auf der Rollout-Detailseite:
 
 Rollout wechselt auf `completed`. Letzter Check:
 
-- Dashboard-Compliance-Kachel: sollte nahe 100 % der Zielgruppe auf `v1.004` sein
+- Dashboard-Compliance-Kachel: sollte nahe 100 % der Zielgruppe auf `v2026.06.22-005` sein
 - Abweicher in der Client-Liste filtern (Status + Version-Spalte), individuell nacharbeiten
 
 ## Stolperfallen

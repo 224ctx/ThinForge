@@ -24,7 +24,7 @@ Branch North (25)
 Branch South (18)
 ```
 
-Each row shows the group name, number of assigned clients (incl. children), and a compact status bar (online/offline/version).
+Each row shows the group name, number of directly assigned clients, and a compact status bar (online/offline/version).
 
 ### Per-group actions
 
@@ -67,11 +67,11 @@ The group assignment is filterable throughout:
 - **Rollouts** — target selection: "Group" instead of client list
 - **Dashboard** — the Compliance card can be broken down per group
 
-## Inheritance and sub-groups
+## Sub-groups
 
-A group-wide action (e.g. rollout) by default applies to **all** clients in the group **and its sub-groups**. In the rollout dialog a checkbox restricts it to the direct group only.
+Sub-groups are purely **organisational** (tree view, filtering). An action — e.g. a rollout — applies **only to the clients directly assigned to the selected group** and is **not** propagated to sub-groups.
 
-Sub-groups help when actions are sometimes combined and sometimes separated (e.g. "update all of Branch North" vs. "update only Info kiosks in Branch North").
+To reach a parent group together with its sub-groups, select the groups individually or use a client list.
 
 ## Best practices
 

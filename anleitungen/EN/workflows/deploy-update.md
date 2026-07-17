@@ -35,7 +35,7 @@ Clean shutdown from within the VM. VM status goes "inactive".
 
 1. **Cloning → Captures**
 2. **"Save update"** → dialog:
-   - **Version** — next number, e.g. `v1.004` (usually auto-suggested)
+   - **Version** — next number, e.g. `v2026.06.22-005` (usually auto-suggested)
    - **Comment** — concise; e.g. "Chromium 126, libssl CVE patch"
    - **"As new baseline"** — **do not** enable (we want delta, not baseline)
 3. Start
@@ -47,9 +47,9 @@ Capture runs 1–5 minutes. Delta is computed against the previous version, land
 First on a few test clients:
 
 1. **Rollouts → + New rollout** ([06](../06-rollouts.md))
-2. **Name**: `2026-04-15 pilot — v1.004`
+2. **Name**: `2026-04-15 pilot — v2026.06.22-005`
 3. **Target**: client list → select the 1–3 pilot clients
-4. **Image**: `v1.004`
+4. **Image**: `v2026.06.22-005`
 5. **Method**: unicast (simple, few clients)
 6. **Schedule**: start now
 7. Save
@@ -62,7 +62,7 @@ Minimum check-list:
 
 - [ ] Clients rebooted and are back online
 - [ ] Agent running (`systemctl status thinforge-agent` via the terminal)
-- [ ] Version column shows `v1.004`
+- [ ] Version column shows `v2026.06.22-005`
 - [ ] User-side nothing obviously wrong (apps start, network works, printers work)
 - [ ] No error traces in tasks ([08](../08-tasks-logs.md))
 
@@ -73,9 +73,9 @@ Minimum check-list:
 When the pilot is solid:
 
 1. **Rollouts → + New rollout**
-2. **Name**: `2026-04-15 broad — v1.004`
+2. **Name**: `2026-04-15 broad — v2026.06.22-005`
 3. **Target**: group (e.g. "Branch North", "all POS")
-4. **Image**: `v1.004`
+4. **Image**: `v2026.06.22-005`
 5. **Method**:
    - **Multicast** when everyone is on the same LAN → fast, bandwidth-friendly
    - **BitTorrent** when across VPN / multiple sites → clients share data
@@ -102,7 +102,7 @@ On the rollout detail page:
 
 Rollout switches to `completed`. Final check:
 
-- Dashboard Compliance card: should be near 100 % of the target group on `v1.004`
+- Dashboard Compliance card: should be near 100 % of the target group on `v2026.06.22-005`
 - Filter the clients list for deviators (status + version columns), deal with them individually
 
 ## Pitfalls

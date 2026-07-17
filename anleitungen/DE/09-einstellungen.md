@@ -1,6 +1,6 @@
 # 9 — Einstellungen
 
-Im Menü **Einstellungen** sind alle administrativen Bereiche gebündelt. Die meisten sind **Admin-only** — Operator und Viewer sehen sie nicht.
+Im Menü **Einstellungen** sind alle administrativen Bereiche gebündelt. Das Menü ist sichtbar, aber viele Aktionen (Benutzerverwaltung, Zertifikat-Upload, Factory-Reset) sind **Admins vorbehalten** und für Operator und Viewer gesperrt.
 
 Die Ansicht ist in Tabs aufgeteilt; diese Anleitung behandelt sie in der Reihenfolge, in der sie im Alltag relevant werden.
 
@@ -30,16 +30,16 @@ Das serverseitige HTTPS-Zertifikat. Default nach Installation: selbstsigniert f�
 
 - **„Hochladen"** → `.crt` und `.key` einzeln auswählen
 - Format: PEM, ungeschützt (Key ohne Passphrase — sonst hält Caddy beim Start)
-- Validierung prüft CN / Subject Alt Names passend zum Server-Hostname
+- Validierung prüft, dass Zertifikat und Schlüssel zusammenpassen
 - Nach Upload: Caddy wird automatisch neu geladen (~5 s Downtime für die Web-UI)
 
 ### Zertifikats-Info
 
-Zeigt CN, Aussteller, Gültigkeit (From/To). Bei Ablauf < 30 Tagen erscheint ein gelber Hinweis; < 7 Tage rot.
+Zeigt CN, Typ (selbstsigniert / eigenes Zertifikat) und Gültigkeit. Solange das Zertifikat gültig ist, werden die verbleibenden Tage angezeigt; nach Ablauf ein roter Hinweis „Abgelaufen".
 
 ## Tab: Benutzer & Rollen
 
-Liste aller angelegten Benutzer mit Rolle, letztem Login, Status.
+Liste aller angelegten Benutzer mit Rolle, Erstelldatum, Status.
 
 ### Neuen Benutzer anlegen
 
@@ -66,7 +66,7 @@ Button erscheint nur, wenn der Benutzer 2FA aktiv hat. Confirm-Dialog → Seed w
 ### Benutzer deaktivieren / löschen
 
 - **Deaktivieren** (Switch `is_active` im Edit-Dialog) — Login gesperrt, Konto und Historie bleiben.
-- **Löschen** — endgültig entfernt. Wenn der Benutzer noch Rollouts erstellt hat, bleiben diese historisch sichtbar mit „(gelöschter Benutzer)". Auf den eigenen Account greift der Button nicht.
+- **Löschen** — endgültig entfernt. Wenn der Benutzer noch Rollouts erstellt hat, bleiben diese erhalten — der Verweis auf den Ersteller entfällt dann lediglich. Auf den eigenen Account greift der Button nicht.
 
 ## Tab: Sicherheit
 
@@ -113,18 +113,15 @@ Beim Speichern werden die Änderungen atomar in die Chrony-Config geschrieben un
 
 Einstellungen, die woanders keinen guten Platz hatten:
 
-- **Automatische Agent-Updates** — bei Heartbeat prüft Agent auf neue Version und installiert (an/aus)
-- **Heartbeat-Intervall** — Default 60 s; kürzer = reaktiver aber mehr Traffic
-- **Logs-Aufbewahrung** — wie viele Tage Log-Historie vorhalten
-- **Branding** — Login-Seiten-Logo austauschen (Datei-Upload, PNG/SVG)
+- **Sitzungs-Timeout** — nach welcher Inaktivität eine Anmeldung abläuft
 
-## Tab: Backup & Restore
+## Backup & Restore
 
-Erzeugt einen Snapshot des ThinForge-Zustands (Postgres-Dump + Secrets + Konfig-Dateien) für Disaster-Recovery.
+Backup & Restore liegt **nicht** unter Einstellungen, sondern im Bereich **Info**. Dort erzeugst du einen Snapshot des ThinForge-Zustands (Postgres-Dump + Secrets + Konfig-Dateien) für Disaster-Recovery.
 
-- **„Backup jetzt"** — speichert als `.tar.gz` in `/data/backups` (und zum Download anbieten)
+- **„Backup jetzt"** — erstellt eine Sicherungsdatei zum Download
 - **„Restore aus Datei"** — hochladen, bestätigen. **Vorsicht**: überschreibt die laufende DB.
-- **Automatische Backups** — Cron-Zeitplan konfigurierbar
+- **Automatische Backups** — Zeitplan konfigurierbar
 
 ## Tab: Factory-Reset
 

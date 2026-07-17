@@ -29,19 +29,19 @@ Bar showing distribution by status:
 | Cloning | orange | Client is currently installing an image |
 | Error | red | Agent reports error state |
 
-Clicking a segment filters the client list accordingly.
+The bar is a static visualisation. Only the Groups link and the availability report (report icon) are clickable; filter the client list via its own status dropdown.
 
 ### Rollouts
 
-Active and recently completed rollouts. Shows per rollout: target group, image version, progress (x/y clients), start/end time. Clicking jumps to the rollout detail page ([06](06-rollouts.md)).
+Active (and paused) rollouts. Shows per rollout: image and progress (x/y clients). Clicking jumps to the rollout detail page ([06](06-rollouts.md)).
 
-### Compliance
+### System health
 
-Percentage of clients running the currently-desired version. Useful during rollouts or after branch-office synchronisation. Clicking the value filters the client list to the deviating devices.
+Lists compliance issues: clients without a group, without an image, or with an expired warranty. The report button opens the compliance report.
 
 ### Alerts
 
-Open alerts — e.g. a client missing heartbeats several times in a row, disk capacity critical, or a failed update rollout. Each alert has **Acknowledge**/**Resolve** actions.
+Open incidents — e.g. a client missing heartbeats several times in a row, disk capacity critical, or a failed update rollout. Each row shows client, condition, status and since. Clicking opens the client detail view; **Show all** takes you to Settings → Alerts, where incidents can be acknowledged and resolved.
 
 ### Recent Clients
 
@@ -49,7 +49,7 @@ Devices that most recently became active — helpful after a large deployment or
 
 ### Disk Usage
 
-Progress bar for the ThinForge data folder (clones, deltas, captures, ISOs). At ≥ 85 % the colour turns red; time to prune old content or add storage.
+Progress bar for the ThinForge data folder (clones, deltas, captures, ISOs). At ≥ 75 % the bar turns amber as a warning, and red at ≥ 90 %; time to prune old content or add storage.
 
 ### Running Tasks
 
@@ -63,10 +63,10 @@ The **cog icon** at the top right opens "Dashboard settings":
 - **Reorder** via drag & drop
 - **Reset** to factory defaults
 
-Settings are stored per user — every operator can tailor the dashboard to their workflow.
+Settings are stored locally in the browser — so the customisation applies per device and browser, not across accounts.
 
 ## Tips for daily use
 
 - **"Inactive" card yellow/red?** Check the services detail view first before panicking — `unhealthy` often has trivial causes (still in `start_period`, right after a reboot, etc.).
 - **Client status bar suddenly showing many "Offline"?** Usually a central network problem (VPN gateway down, DHCP lease hiccups). Check logs ([08](08-tasks-logs.md#logs)).
-- **Rollouts card shows "in progress" but nothing moves?** The card does not refresh live — reload the browser or use the refresh button on the rollout detail page.
+- **Rollouts card shows "in progress" but nothing moves?** The status, alert and disk cards refresh roughly every 30 seconds; rollouts, services, system health and recent clients, however, only update on reload. For a seemingly stuck rollout, reload the browser or use the refresh button on the rollout detail page.

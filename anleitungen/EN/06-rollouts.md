@@ -44,13 +44,14 @@ Clicking a row opens the rollout detail page.
 - **Deployment method**:
   - **Unicast** — each client downloads directly from the server. Simple, always works; with > 50 clients on the same LAN the server uplink becomes the bottleneck.
   - **Multicast** — server streams once over UDP multicast, all clients receive in parallel. Great for large LAN rollouts. LAN only, not across VPN/routed networks.
-  - **BitTorrent** — clients pull the clone as a torrent and share bandwidth among themselves. Good for many clients over VPN or in branch offices. Only **one** at a time because of fixed tracker ports.
+  - **BitTorrent** — clients pull the clone as a torrent and share bandwidth among themselves. Good for many clients on the same LAN. Only **one** at a time because of fixed tracker ports.
 
 ### Tab 4 — Schedule
 
 - **Start now** — rollout begins after confirmation
-- **Scheduled** — set date/time; the scheduler starts it at that moment
+- **Scheduled** — set date/time (e.g. 23:00); the scheduler starts it at that moment
 - **Manual start** — save the rollout as "draft", start later via button
+- **Wake-on-LAN** — available only for a **scheduled** rollout: the target devices are powered on 1–60 minutes before the start via a magic packet (PXE boot required). Without a set time the WoL option is unavailable.
 
 ### Save
 
@@ -60,7 +61,7 @@ Depending on the schedule option the rollout is active immediately, waiting for 
 
 The detail page shows:
 
-- **Header bar** — status, progress, action buttons (pause / cancel / rollback)
+- **Header bar** — status, progress, action buttons (cancel / rollback)
 - **Client list with per-client status**:
   - `pending` — waiting to start
   - `deploying` — client pulling and installing
@@ -68,13 +69,9 @@ The detail page shows:
   - `failed` — error, details in the client history
   - `cancelled` — cancelled by the operator
 - **Live logs** — backend logs for the rollout (also visible in Tasks / Logs)
-- **Timeline** — events (started, paused, completed)
+- **Timeline** — events (started, completed)
 
 ## Rollout actions
-
-### Pause
-
-Stops new client starts; already-running installations complete. Resume anytime. Useful when you observe problems during a rollout and want to verify before continuing.
 
 ### Cancel
 
@@ -88,7 +85,7 @@ On the detail page, the **"Rollback"** button sends all clients already updated 
 
 | | Unicast | Multicast | BitTorrent |
 |---|---------|-----------|------------|
-| Network | LAN + VPN | LAN only | LAN + VPN |
+| Network | LAN only | LAN only | LAN only |
 | Scale | ~50 clients | hundreds | hundreds |
 | Parallel rollouts | yes (server CPU limits) | yes (per subnet) | **no** (tracker port conflict) |
 | Missing clients | no problem | client must boot at the right moment | client can join later |
@@ -102,7 +99,7 @@ On the detail page, the **"Rollback"** button sends all clients already updated 
 
 ## Rollouts and VPN
 
-For VPN clients, **unicast** and **BitTorrent** are the relevant options. Multicast only works in the local subnet. For mixed targets (LAN clients + VPN clients in one group) unicast is usually chosen — simple, no configuration pitfalls.
+The three distribution methods (unicast, multicast, BitTorrent) distribute full clone images and run only on the local network (LAN). Over VPN, only **delta updates** are supported — clients in home office / branch sites receive changes as a delta, not as a full re-clone.
 
 ## Next steps
 

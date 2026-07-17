@@ -1,6 +1,6 @@
 # 9 — Settings
 
-The **Settings** menu gathers every administrative area. Most are **admin-only** — operators and viewers don't see them.
+The **Settings** menu gathers every administrative area. The menu is visible to everyone, but many actions (user management, certificate upload, factory reset) are **admin-only** and blocked for operators and viewers.
 
 The view has tabs; this guide walks through them in roughly the order they become relevant in everyday work.
 
@@ -28,16 +28,16 @@ The server-side HTTPS certificate. Default after install: self-signed for the se
 
 - **"Upload"** → pick `.crt` and `.key` separately
 - Format: PEM, unprotected (key without passphrase — otherwise Caddy stalls on start)
-- Validation checks CN / Subject Alternative Names match the server hostname
+- Validation checks that the certificate and key match each other
 - After upload: Caddy auto-reloads (~5 s downtime for the web UI)
 
 ### Certificate info
 
-Shows CN, issuer, validity (From/To). When expiry < 30 days a yellow warning appears; < 7 days red.
+Shows CN, type (self-signed / custom certificate) and validity. While the certificate is valid it shows the remaining days; once it has lapsed a red "Expired" notice appears.
 
 ## Tab: Users & Roles
 
-List of all created users with role, last login, state.
+List of all created users with role, creation date, state.
 
 ### Create a new user
 
@@ -58,7 +58,7 @@ On a user via menu → **"Reset password"**. Sends an email (when SMTP is config
 ### Disable / delete user
 
 - **Disable** — login blocked; account and history remain
-- **Delete** — permanently removed. If the user has already created rollouts, those stay historically visible as "(deleted user)"
+- **Delete** — permanently removed. If the user has already created rollouts, those are kept — only the reference to the creator is cleared
 
 ## Tab: Signing Keys
 
@@ -86,18 +86,15 @@ Saving writes atomically to the chrony config and reloads via SIGHUP — no cont
 
 Settings that did not have a better home elsewhere:
 
-- **Automatic agent updates** — during heartbeat the agent checks for a new version and installs (on/off)
-- **Heartbeat interval** — default 60 s; shorter = more reactive but more traffic
-- **Log retention** — how many days of log history to keep
-- **Branding** — replace the login-page logo (file upload, PNG/SVG)
+- **Session timeout** — after how much inactivity a login expires
 
-## Tab: Backup & Restore
+## Backup & Restore
 
-Creates a snapshot of the ThinForge state (Postgres dump + secrets + config files) for disaster recovery.
+Backup & Restore lives under **Info**, not under Settings. There you create a snapshot of the ThinForge state (Postgres dump + secrets + config files) for disaster recovery.
 
-- **"Backup now"** — saves as `.tar.gz` under `/data/backups` (and offers a download)
+- **"Backup now"** — creates a backup file you can download
 - **"Restore from file"** — upload, confirm. **Careful**: overwrites the running database.
-- **Automatic backups** — cron schedule configurable
+- **Automatic backups** — schedule configurable
 
 ## Tab: Factory Reset
 

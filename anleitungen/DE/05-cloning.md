@@ -2,29 +2,31 @@
 
 Der Cloning-Bereich ist das Herzstück von ThinForge: hier entstehen, pflegst du und verwaltest die Disk-Images (Clones), die später an die Thin-Clients verteilt werden.
 
-Die Ansicht hat **vier Tabs**: Cloning-VM, ISOs, Captures, Clones. Jeder Tab deckt einen Schritt im Image-Lifecycle ab.
+Die Ansicht hat mehrere Tabs. Die wichtigsten für den Image-Lifecycle sind **VM erstellen**, **ISOs**, **Captures** und **Clones**.
 
 ## Lifecycle im Überblick
 
 ```
-1. ISO hochladen/herunterladen
+1. Basis HD erstellen  (ohne dieses Basis-Layout der Festplatte ist
+   die Delta-Update-Funktionalität nicht gewährleistet)
        ↓
-2. Cloning-VM mit ISO booten
+2. ISO hochladen/herunterladen, Cloning-VM damit booten
        ↓
-3. OS installieren, Agent setzen, anpassen
+3. OS installieren → für den Neustart: VM stoppen, prüfen dass die
+   ISO abgewählt ist, VM starten → Agent installieren, anpassen
        ↓
-4. Capture → erstes Image = Baseline (v1.000)
+4. Delta-Update erstellen ("Updatedelta speichern & Klon erstellen")
+   → Image (v2026.06.22-001)
        ↓
-5. Änderung: VM starten, modifizieren, "Save Update"
+5. Später: VM starten, ändern, erneut "Updatedelta speichern"
+   → v2026.06.22-002, v2026.06.22-003, ...
        ↓
-6. Delta-Capture → v1.001, v1.002, ...
-       ↓
-7. Rollout → Clients pullen das Image ([06](06-rollouts.md))
+6. Rollout → Clients pullen das Image ([06](06-rollouts.md))
 ```
 
 ---
 
-## Tab: Cloning-VM
+## Tab: VM erstellen
 
 Die Cloning-VM ist eine QEMU/KVM-Instanz, die auf dem Server läuft. Sie hat eine dedizierte qcow2-Disk, die als Vorlage für alle späteren Clones dient.
 
@@ -32,7 +34,7 @@ Die Cloning-VM ist eine QEMU/KVM-Instanz, die auf dem Server läuft. Sie hat ein
 
 Oben auf dem Tab zeigt eine Statusleiste:
 
-- **Aktiv** (grün) — VM läuft, noVNC ist eingeklinkt
+- **Aktiv** (grün) — VM läuft, Konsole ist eingeklinkt
 - **Inaktiv** (grau) — nicht gestartet
 - **Wird gestartet / wird gestoppt** — Übergangszustand
 
@@ -43,22 +45,21 @@ Oben auf dem Tab zeigt eine Statusleiste:
 3. Ressourcen (RAM, CPUs, Disk-Größe) bestätigen oder anpassen
 4. Starten
 
-Nach 10–30 Sekunden ist die VM bootfähig, der **„Öffnen in VNC"**-Button wird aktiv.
+Nach 10–30 Sekunden ist die VM bootfähig, die Konsole wird aktiv.
 
-### VNC-Zugriff
+### Konsole
 
-- Klick auf **„Öffnen in VNC"** — öffnet in-Browser noVNC
-- Vollbild möglich, Zwischenablage wird durchgereicht
+- Die VM-Konsole ist direkt im Tab eingebettet; mit **„In neuem Tab öffnen"** lässt sie sich in einem eigenen Fenster anzeigen
+- Die Zwischenablage wird durchgereicht
 - Die VM ist damit wie ein normaler PC bedienbar: Installation klicken, Software einrichten, Updates laufen lassen
 
 ### Stoppen
 
-- **„VM stoppen"** — sauberer Shutdown via ACPI
-- **„Force Stop"** — hartes Killen (wenn VM hängt)
+- **„VM stoppen"** — fährt die VM herunter
 
 ### Ressourcen
 
-Die Standard-Werte (2 GB RAM, 2 CPUs, 60 GB Disk) reichen für die meisten Linux- und Windows-Versionen. Anpassen über die `.env`-Variablen `CLONING_VM_RAM`, `CLONING_VM_CPUS`, `CLONING_VM_DISK_SIZE` (siehe [09 — Einstellungen](09-einstellungen.md)).
+Die Standard-Werte (RAM, CPUs, Disk-Größe) reichen für die meisten Linux- und Windows-Versionen. RAM, CPUs und Disk-Größe stellst du pro VM direkt beim Start ein; die serverseitigen Standardwerte werden in der Server-Konfiguration festgelegt, nicht im Einstellungen-Bereich der Oberfläche.
 
 ---
 
@@ -83,47 +84,56 @@ Nur möglich wenn keine aktive VM die ISO nutzt. Sonst Fehlermeldung mit Hinweis
 
 ### Tools-ISO
 
-Ein spezieller Eintrag, `thinforge-tools.iso`, wird automatisch vom Server gebaut. Enthält das Client-Provisioning-Script und wird für das **erstmalige Aufsetzen eines neuen Thin-Clients** per USB-Stick oder PXE verwendet ([workflows/erster-client.md](workflows/erster-client.md)).
+Die Tools-ISO wird automatisch vom Server gebaut. Sie enthält das Client-Provisioning-Script und wird für das **erstmalige Aufsetzen eines neuen Thin-Clients** per USB-Stick oder PXE verwendet ([workflows/erster-client.md](workflows/erster-client.md)).
 
-- **„Rebuild"** — Neuaufbau z. B. nach Zertifikats-Erneuerung oder Schlüsselrotation. Dauert ~1 Minute.
+Die Tools-ISO wird bei jedem Start der Cloning-VM automatisch neu gebaut. Nach einer Zertifikats-Erneuerung oder Schlüsselrotation genügt es daher, die VM neu zu starten.
+
+---
+
+## Image aus der VM erstellen
+
+Im Tab **VM erstellen** sicherst du den VM-Stand als ausrollbares Image (die VM muss **gestoppt** sein). Der Dialog wählt automatisch den passenden Modus.
+
+### Basis erstellen
+
+- Legt einen Basis-Snapshot der VM an und startet eine neue Versionskette
+- Beim ersten Mal (noch keine Clones) automatisch gewählt; per Option **„Als neue Basis"** jederzeit erzwingbar
+- **Wann?** Bei Erstinstallation oder für eine saubere neue Kette (z. B. nach großen OS-Upgrades)
+
+### Updatedelta speichern & Klon erstellen
+
+- Erstellt ein Delta gegen die letzte Version **und** ein vollständiges, ausrollbares Clone-Image
+- Schnell und klein (nur geänderte Blöcke im Delta)
+- **Wann?** Für laufende Updates — Security-Patches, Konfig-Änderungen, neue Software
+
+### Image erstellen
+
+1. Cloning-VM muss **gestoppt** sein (sonst Fehlermeldung)
+2. Im Tab **VM erstellen** auf **„Updatedelta speichern & Klon erstellen"**
+3. Im Dialog:
+   - **Version** — wird automatisch vergeben im Format `vJJJJ.MM.TT-NNN` (Datum + fortlaufender Tageszähler pro Image-Linie), z. B. `v2026.06.22-001`
+   - **Kommentar** — kurze Notiz, was geändert wurde
+   - **„Als neue Basis"** — erzwingt eine frische Kette (Basis-Modus)
+4. Starten
+
+Der Vorgang läuft als Hintergrundtask. Fortschritt sichtbar hier und in **Tasks** ([08](08-tasks-logs.md)). Je nach Disk-Größe dauert ein vollständiges Image 10–30 Minuten, ein Delta meist 1–5 Minuten.
+
+### Abbrechen
+
+Während der Vorgang läuft, erscheint ein **„Abbrechen"**-Button. Abbruch räumt halb-erzeugte Files auf — die VM bleibt unbeschädigt.
 
 ---
 
 ## Tab: Captures
 
-Der **Capture** ist der Vorgang, den VM-Stand in ein ausrollbares Image zu überführen. Zwei Arten:
+Der Tab **Captures** erfasst dagegen die Festplatte eines **physischen Clients**: Das Gerät bootet per PXE in eine Capture-Umgebung (Clonezilla), und sein Plattenstand wird als Image gesichert.
 
-### Baseline-Capture
-
-- Erzeugt ein vollständiges Image (keinen Delta-Parent)
-- Löscht vorhandene Snapshots in der VM
-- Startet eine neue Versionskette: `v1.000`, `v2.000`, …
-
-**Wann?** Bei Erstinstallation oder wenn du eine saubere neue Kette willst (z. B. nach großen OS-Upgrades).
-
-### Delta-Capture („Save Update")
-
-- Erzeugt ein inkrementelles Image gegen die letzte Version
-- Schnell und klein (nur geänderte Blöcke)
-- Version wird hochgezählt: `v1.003` → `v1.004`
-
-**Wann?** Für laufende Updates — Security-Patches, Konfig-Änderungen, neue Software.
-
-### Capture starten
-
-1. Cloning-VM muss **gestoppt** sein (sonst Fehlermeldung)
-2. In Tab **Captures** auf **„Save Update"**
-3. Dialog:
-   - **Version** — vorausgefüllt (nächste Nummer), kann überschrieben werden
-   - **Kommentar** — kurze Notiz was geändert wurde
-   - **„Als neue Basis"** — Checkbox für Baseline-Modus (erzeugt `v<nextRoot>.000`)
+1. Client auswählen
+2. Namen für das Capture vergeben
+3. Festlegen, ob das Gerät danach **herunterfährt** oder **neu startet**
 4. Starten
 
-Der Capture läuft als Hintergrundtask. Fortschritt sichtbar hier im Tab und in **Tasks** ([08](08-tasks-logs.md)). Je nach Disk-Größe dauert ein Full-Capture 10–30 Minuten, ein Delta meist 1–5 Minuten.
-
-### Capture abbrechen
-
-Während der Capture läuft, erscheint ein **„Abbrechen"**-Button. Abbruch räumt halb-erzeugte Files auf — die VM bleibt unbeschädigt.
+Der Vorgang läuft als Hintergrundtask; der Fortschritt ist in **Tasks** ([08](08-tasks-logs.md)) sichtbar.
 
 ---
 
@@ -136,26 +146,26 @@ Die Liste der fertigen Images, bereit zum Ausrollen.
 Clones werden hierarchisch dargestellt — Baselines als Root, Deltas als Kinder:
 
 ```
-v1.000 (Baseline)
-├─ v1.001
-├─ v1.002
-├─ v1.003
-└─ v1.004    ← aktuelle "stable", letzter Update
+v2026.06.22-001 (Baseline)
+├─ v2026.06.22-002
+├─ v2026.06.22-003
+├─ v2026.06.22-004
+└─ v2026.06.22-005    ← aktuelle "stable", letzter Update
 
-v2.000 (Baseline)
-└─ v2.001
+v2026.06.23-001 (Baseline)
+└─ v2026.06.23-002
 ```
 
-Innerhalb einer Versionskette (z. B. alle `v1.x`) sind die Updates **flach** — `v1.001`, `v1.002`, `v1.003` sind Geschwister unter `v1.000`, nicht ineinander verschachtelt. Das macht es einfach, einzelne Updates später zu löschen, ohne die Kette zu zerreißen. Falls ein Clone mit defektem `parent_id` auftaucht (z. B. weil der Ur-Quell-Clone gelöscht wurde), repariert ThinForge den Baum beim nächsten Öffnen des Clones-Tabs automatisch.
+Innerhalb einer Kette sind die Deltas **flach** — sie hängen als Geschwister direkt an der Basis (verknüpft über `parent_id`, nicht über die Versionsnummer), nicht ineinander verschachtelt. Das macht es einfach, einzelne Updates später zu löschen, ohne die Kette zu zerreißen. Falls ein Clone mit defektem `parent_id` auftaucht (z. B. weil der Ur-Quell-Clone gelöscht wurde), repariert ThinForge den Baum beim nächsten Öffnen des Clones-Tabs automatisch.
 
-Die **Basis** einer Kette ist der Clone, von dem aus aktuell ausgerollt wird — meist der erste, manchmal ein späterer (wenn ältere Versionen archiviert sind).
+Die **Basis** einer Kette wird automatisch bestimmt: Es ist die Wurzel der Versionskette (die niedrigste Version ohne Elternteil). Sie wird als Markierung angezeigt.
 
 ### Aktionen pro Clone
 
 - **Details anzeigen** — Metadaten (Größe, Kommentar, Erzeugt am, Agent-Version zum Capture-Zeitpunkt)
-- **Als Basis setzen** — markiert diesen Clone als Chain-Start (Ausrollen beginnt hier)
 - **Reassign / Einsortieren** — hängt den Clone an eine andere Stelle im Baum (siehe unten)
-- **Exportieren** — Download als Tarball
+- **Wiederherstellen** — spielt den Clone wieder auf die Cloning-VM zurück. So lässt sich jederzeit zu einer älteren Version zurückwechseln. Achte aber darauf, dass auch die Clients auf der älteren Version landen — entweder über ein neues Deployment oder über den Rollback (der nur die jeweils vorherige Version wiederherstellen kann).
+- **Exportieren** — Download als 7z-Archiv
 - **Löschen** — nur möglich, wenn keine Clients diese Version aktiv nutzen und keine Deltas davon abhängen
 
 ### Reassign / Einsortieren

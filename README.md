@@ -19,7 +19,7 @@ Dieses Repo enthält alles, was ein Host zum Betrieb von ThinForge braucht — *
 | `docs/security/`, `docs/CHANGELOG.md` | Werden vom Backend/Frontend RO gemountet |
 | `anleitungen/` | Operator-Doku (DE + EN): Dashboard, Clients, Cloning, Rollouts, Netzwerk, Einstellungen |
 
-Der Quellcode liegt separat in `thinforge/ThinForge` (private Source-Repo). Dieses Release-Repo ist **öffentlich** — zum Klonen ist kein Gitea-Zugang nötig.
+Der vollständige Quellcode liegt öffentlich in [`thinforge/ThinForge-Dev`](https://git.thinforge.org/thinforge/ThinForge-Dev) (GPL-3.0-or-later). Dieses Release-Repo enthält die getesteten Stände für den Produktivbetrieb — zum Klonen ist kein Account nötig.
 
 ---
 

@@ -20,7 +20,7 @@ Karte **Passwort ändern**:
 3. Bestätigung wiederholen — muss zeichengenau übereinstimmen.
 4. **Speichern**.
 
-Bei Erfolg verschwinden die Eingaben, die Meldung „Passwort aktualisiert" erscheint als Snackbar. Der nächste Login (und jede Token-Refresh) verwendet das neue Passwort; bestehende Sessions bleiben aktiv, solange der Browser das Cookie hält.
+Bei Erfolg verschwinden die Eingaben, die Meldung „Passwort wurde erfolgreich geändert" erscheint als Snackbar. Aus Sicherheitsgründen werden bestehende Sitzungen beim Passwortwechsel beendet — du musst dich anschließend mit dem neuen Passwort neu anmelden.
 
 Schlägt die Prüfung des alten Passworts fehl, wird genau dieser Fehler gemeldet — der neue Wert wird dann nicht übernommen.
 
@@ -30,18 +30,18 @@ TOTP schützt den Account zusätzlich mit einem zeitbasierten 6-stelligen Code a
 
 Ablauf:
 
-1. Karte **Zwei-Faktor-Authentisierung** → **TOTP aktivieren**.
+1. Karte **Zwei-Faktor-Authentisierung** → **2FA aktivieren**.
 2. Der Server liefert QR-Code + Secret. QR-Code mit der Authenticator-App scannen **oder** das alphanumerische Secret manuell eingeben (z. B. wenn die App keinen QR-Scan unterstützt).
 3. **Weiter** → 6-stelligen Code aus der App in das Eingabefeld übertragen.
-4. **Aktivieren** bestätigt den Code.
+4. **2FA aktivieren** bestätigt den Code.
 
 Nach erfolgreicher Aktivierung zeigt die Karte den Status **aktiviert** (grüner Chip) und der nächste Login verlangt nach dem Passwort zusätzlich den 6-stelligen Code.
 
 > **Tipp:** Den Secret-String oder einen Screenshot des QR-Codes **einmalig** an einem sicheren Ort (Passwort-Manager, verschlüsselter Container) ablegen, damit bei Geräteverlust die Einrichtung auf einem neuen Endgerät möglich bleibt. Die App zeigt das Secret später nicht mehr.
 
-## TOTP deaktivieren
+## 2FA deaktivieren
 
-- Karte **Zwei-Faktor-Authentisierung** → **TOTP deaktivieren**.
+- Karte **Zwei-Faktor-Authentisierung** → **2FA deaktivieren**.
 - Dialog fragt nach dem aktuellen Passwort **und** einem gültigen aktuellen TOTP-Code.
 - Nach Bestätigung ist der zweite Faktor entfernt.
 

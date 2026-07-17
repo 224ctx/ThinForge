@@ -1,5 +1,17 @@
 # 1 — Erste Schritte
 
+## Installation
+
+ThinForge läuft als Docker-Stack auf einem Server im lokalen Netz (Debian oder Ubuntu). Die Installation erledigt ein Bootstrap-Skript, das einmalig auf dem frischen Server ausgeführt wird:
+
+```bash
+./bootstrap-release.sh
+```
+
+Es lädt die ThinForge-Komponenten, richtet die Grundkonfiguration samt automatisch erzeugter Zugangs-Geheimnisse ein (kein manuelles Bearbeiten der `.env` nötig) und startet den kompletten Stack. Danach ist die Web-Oberfläche unter der Server-Adresse erreichbar.
+
+> **Hinweis:** Das Bootstrap-Skript erhältst du von deinem ThinForge-Anbieter. `git` muss auf dem Server vorhanden sein; alle weiteren Abhängigkeiten installiert das Skript selbst.
+
 ## Server-Adresse aufrufen
 
 Die Web-Oberfläche ist unter der HTTPS-Adresse des ThinForge-Servers erreichbar. Beim Erstaufruf zeigt der Browser eine Zertifikatswarnung, weil die Installation mit einem selbst-signierten Zertifikat ausgeliefert wird. Sobald ein eigenes Zertifikat hinterlegt ist (siehe [09 — Einstellungen](09-einstellungen.md), Abschnitt TLS), verschwindet die Warnung.
@@ -10,23 +22,22 @@ https://<server-hostname-oder-ip>/
 
 ## Setup-Wizard
 
-Beim allerersten Aufruf nach einer frischen Installation erscheint der **Setup-Wizard**. Er führt in fünf Schritten durch die Grundkonfiguration:
+Beim allerersten Aufruf nach einer frischen Installation erscheint der **Setup-Wizard**. Er führt in sechs Schritten durch die Grundkonfiguration:
 
-1. **Admin-Benutzer anlegen** — E-Mail, Anzeigename, Passwort. Das ist der erste Admin-Account; weitere Benutzer werden später in den Einstellungen hinzugefügt.
-2. **DNS-Konfiguration** — Upstream-DNS (Default: Management-Gateway), lokale Domain für dnsmasq.
-3. **DHCP / PXE** — Subnetz und Rollout-IP-Range. Wird für das Booten neuer Thin-Clients gebraucht.
-4. **NTP** — Chrony-Upstream-Server. Standard ist `pool.ntp.org`; intern meist ein Management-NTP.
-5. **Tools-ISO** — ISO für die initiale Client-Provisionierung wird gebaut. Das dauert 1–2 Minuten.
+1. **Admin-Konto anlegen** — E-Mail, Anzeigename, Passwort. Das ist der erste Admin-Account; weitere Benutzer werden später in den Einstellungen hinzugefügt.
+2. **Server-Identität** — Hostname und lokale Domain für dnsmasq.
+3. **DHCP / PXE** — Subnetz und Rollout-IP-Range sowie der Upstream-DNS. Wird für das Booten neuer Thin-Clients gebraucht.
+4. **NTP** — Upstream-Zeitserver. Standard ist `0.pool.ntp.org`; intern meist ein Management-NTP.
+5. **HTTPS / TLS** — ein selbst-signiertes Zertifikat wird angelegt.
+6. **Zusammenfassung** — alle Eingaben prüfen und abschließen.
 
-Nach Abschluss des Wizards landet man auf dem **Dashboard**.
-
-> **Hinweis:** Wird der Wizard abgebrochen, erscheint er beim nächsten Login erneut, bis alle Schritte einmal vollständig durchlaufen sind.
+Nach Abschluss des Wizards landet man auf dem **Dashboard**. Die Tools-ISO für die initiale Client-Provisionierung wird nicht im Setup gebaut, sondern erst beim ersten Start der Cloning-VM.
 
 ## Anmelden
 
 Nach dem Setup meldet man sich mit den eben angelegten Admin-Zugangsdaten an. Weitere Operator- und Viewer-Konten entstehen in [09 — Einstellungen → Benutzer](09-einstellungen.md#benutzer--rollen).
 
-**Passwort vergessen?** Die „Passwort zurücksetzen"-Funktion im Login-Screen schickt einen Reset-Link — dafür muss in den Einstellungen ein SMTP-Server eingetragen sein. Ohne SMTP muss eine andere Admin-Person das Passwort in [09 — Einstellungen → Benutzer](09-einstellungen.md#benutzer--rollen) neu setzen.
+**Passwort vergessen?** Der E-Mail-Versand eines Reset-Links ist derzeit noch nicht verfügbar. Eine andere Admin-Person setzt das Passwort daher in [09 — Einstellungen → Benutzer](09-einstellungen.md#benutzer--rollen) neu.
 
 ## UI-Tour
 
@@ -57,12 +68,14 @@ Menüpunkte richten sich nach Berechtigung. Typisch sichtbar als Operator:
 - **Dashboard** — Übersicht ([02](02-dashboard.md))
 - **Clients** — Geräteverwaltung ([03](03-clients.md))
 - **Gruppen** — Organisation ([04](04-gruppen.md))
-- **Cloning** — Image-Management ([05](05-cloning.md))
-- **Rollouts** — Deployment-Planung ([06](06-rollouts.md))
+- **Cloning** — Image-Management; Rollouts/Rollback liegen hier als Tabs ([05](05-cloning.md))
+- **VPN** — ThinVPN-Verwaltung
 - **Netzwerk** — Infrastruktur-Einstellungen ([07](07-netzwerk.md))
 - **Tasks** — laufende und historische Aufträge ([08](08-tasks-logs.md))
-- **Logs** — Server-Protokolle ([08](08-tasks-logs.md))
-- **Einstellungen** — Dienste, Config, Benutzer (Admin-only, [09](09-einstellungen.md))
+- **Berichte** — Auswertungen und Exporte
+- **Einstellungen** — Dienste, Config, Benutzer ([09](09-einstellungen.md))
+- **Logs** — Server-Protokolle, nur für Admins ([08](08-tasks-logs.md))
+- **Info** — Systeminfo und Backup
 
 ### Hauptfläche (rechts)
 
@@ -70,7 +83,7 @@ Der Inhalt ändert sich je nach ausgewähltem Menüpunkt. Die meisten Ansichten 
 
 ## Dashboard anpassen
 
-Rechts oben auf dem Dashboard liegt ein **Zahnrad-Icon** — damit lassen sich Kacheln aus- und einblenden und per Drag & Drop sortieren. Die Einstellung bleibt pro Benutzer gespeichert.
+Rechts oben auf dem Dashboard liegt ein **Zahnrad-Icon** — damit lassen sich Kacheln aus- und einblenden und per Drag & Drop sortieren. Die Einstellung wird lokal im Browser gespeichert (pro Gerät).
 
 ## Nächste Schritte
 

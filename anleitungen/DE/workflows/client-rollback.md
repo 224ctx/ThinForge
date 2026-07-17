@@ -15,7 +15,7 @@ Schnell, direkt in der Detail-Seite.
 
 1. **Clients → Client-Detail** öffnen ([03](../03-clients.md))
 2. Tab **Aktionen** → **„Rollback"**
-3. Bestätigungs-Dialog zeigt: *"Dieser Client wird auf `v1.003` zurückgesetzt (aktuell: `v1.004`). Fortfahren?"*
+3. Bestätigungs-Dialog zeigt: *"Dieser Client wird auf `v2026.06.22-004` zurückgesetzt (aktuell: `v2026.06.22-005`). Fortfahren?"*
 4. Bestätigen
 
 Was passiert:

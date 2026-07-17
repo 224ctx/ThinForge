@@ -59,10 +59,10 @@ Diese Anleitung richtet sich an **IT-Administrator:innen**, die ThinForge über 
 | Begriff | Bedeutung |
 |---------|-----------|
 | **Thin-Client** | Physisches Endgerät (PC, Laptop) das mit einem ThinForge-verwalteten OS-Image läuft |
-| **Clone** | Ein gespeichertes Disk-Image mit Versionsnummer (z. B. `v1.003`), wird auf Thin-Clients ausgerollt |
+| **Clone** | Ein gespeichertes Disk-Image mit Versionsnummer (z. B. `v2026.06.22-004`), wird auf Thin-Clients ausgerollt |
 | **Capture** | Der Vorgang, ein Disk-Image aus einer laufenden Cloning-VM zu extrahieren |
 | **Baseline** | Die erste Version einer Clone-Kette (`vX.000`), vollständiges Image ohne Delta-Parent |
-| **Delta-Update** | Inkrementelles Update vom Vorgänger-Clone zu einer neuen Version (z. B. `v1.003 → v1.004`) |
+| **Delta-Update** | Inkrementelles Update vom Vorgänger-Clone zu einer neuen Version (z. B. `v2026.06.22-004 → v2026.06.22-005`) |
 | **Rollout** | Verteilung eines Clones an eine Liste oder Gruppe von Thin-Clients |
 | **Agent** | Kleiner Dienst auf jedem Thin-Client, der Heartbeat, Updates und Remote-Befehle handhabt |
 | **Cloning-VM** | Virtuelle Maschine auf dem Server, in der das Basis-OS installiert und modifiziert wird |

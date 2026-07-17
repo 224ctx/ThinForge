@@ -24,7 +24,7 @@ Filiale Nord (25)
 Filiale Süd (18)
 ```
 
-Jede Zeile zeigt Gruppenname, Anzahl zugewiesener Clients (inkl. Untergruppen), und eine kompakte Status-Leiste (online/offline/version).
+Jede Zeile zeigt Gruppenname, Anzahl direkt zugewiesener Clients, und eine kompakte Status-Leiste (online/offline/version).
 
 ### Aktionen pro Gruppe
 
@@ -67,11 +67,11 @@ Die Gruppen-Zuordnung ist überall filterbar:
 - **Rollouts** — Ziel-Auswahl: „Gruppe" statt Client-Liste
 - **Dashboard** — Compliance-Kachel lässt sich pro Gruppe aufschlüsseln
 
-## Vererbung und Unter-Gruppen
+## Unter-Gruppen
 
-Eine Gruppen-weite Aktion (z. B. Rollout) gilt standardmäßig für **alle** Clients in der Gruppe **und allen Untergruppen**. Im Rollout-Dialog lässt sich das per Checkbox auf die direkte Gruppe beschränken.
+Untergruppen dienen der **Organisation** (Baumansicht, Filterung). Eine Aktion — etwa ein Rollout — wirkt **nur auf die direkt zugewiesenen Clients der gewählten Gruppe** und wird **nicht** auf Untergruppen übertragen.
 
-Untergruppen sind hilfreich, wenn Aktionen mal gemeinsam, mal getrennt laufen sollen (z. B. „Filiale Nord insgesamt update" vs. „nur Info-Kiosks in Filiale Nord update").
+Um eine übergeordnete Gruppe samt Untergruppen zu erreichen, wählst du die Gruppen einzeln aus oder nutzt eine Client-Liste.
 
 ## Best Practices
 

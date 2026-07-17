@@ -1,6 +1,6 @@
 # 11 — Lizenzierung
 
-ThinForge ist im **Free-Tier** voll funktional und verwaltet bis zu **50 aktive Clients** ohne Lizenzdatei. Darüber hinaus wird ein signiertes Lizenz-Bundle benötigt — ausschließlich, um den Client-Zähler anzuheben. Es gibt **kein Feature-Gating**: alle Funktionen bleiben in jedem Tier identisch.
+ThinForge ist im **Free-Tier** voll funktional und verwaltet bis zu **50 aktive Clients** ohne Lizenzdatei. Darüber hinaus wird ein signiertes Lizenz-Bundle benötigt, das in erster Linie den Client-Zähler anhebt. Wird das Limit überschritten, wird der zuletzt hinzugekommene Client herabgestuft und verliert dabei **Premium-Funktionen** wie Delta-Updates, Rollouts und die Snapshot-Verwaltung.
 
 ## Begriffe
 
@@ -20,12 +20,12 @@ Die Statuskarte zeigt:
 
 - **Lizenzdaten** (Lizenzinhaber, Lizenznummer, Ablaufdatum).
 - **Aktive Clients** gegen das Limit als Fortschrittsbalken — farblich gekennzeichnet:
-  - grün bei unter 90 %,
+  - blau bei unter 90 %,
   - orange ab 90 %,
   - rot, sobald das Limit erreicht ist.
 - **Banner**, falls Grace-Period aktiv oder Bundle abgelaufen ist.
 
-Im Free-Tier zeigt die Karte nur den Hinweis „Free version" — das ist kein Fehler, sondern der Default-Zustand vieler Installationen.
+Im Free-Tier zeigt die Karte nur den Hinweis „Kostenlose Version" — das ist kein Fehler, sondern der Default-Zustand vieler Installationen.
 
 ## Lizenz-Bundle hochladen
 
@@ -55,7 +55,7 @@ Vom Hersteller erhältst du ein `.7z`-Archiv, das `license.json` und `license.js
 
 ## Lager-Geräte
 
-Ein Client mit gesetztem Flag **is_lager** (Detailformular → „Lager" aktivieren) zählt nicht zum Limit und wird in der Liste halbtransparent mit orangenem Chip angezeigt. Beim Ausrollen an einen Endkunden wird das Flag entfernt; der Client zählt ab dann wieder.
+Ein Client mit gesetztem Flag **is_lager** (Detailformular → „Lager" aktivieren) zählt nicht zum Limit und wird in der Liste halbtransparent mit orangenem Chip angezeigt. Beim Ausrollen an einen Endkunden entfernst du das Flag von Hand im Detailformular; der Client zählt ab dann wieder.
 
 ## Lizenzverlängerung
 

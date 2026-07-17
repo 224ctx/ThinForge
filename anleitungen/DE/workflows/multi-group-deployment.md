@@ -37,8 +37,8 @@ Vorteile aus Operator-Sicht:
 
 Workflow:
 
-1. Deployment 1 anlegen: Gruppe Marketing, Clone `marketing-v1.005`, Modus BitTorrent.
-2. Deployment 2 anlegen: Gruppe Sales, Clone `sales-v1.002`, Modus BitTorrent.
+1. Deployment 1 anlegen: Gruppe Marketing, Clone `marketing-v2026.06.22-006`, Modus BitTorrent.
+2. Deployment 2 anlegen: Gruppe Sales, Clone `sales-v2026.06.22-003`, Modus BitTorrent.
 3. Beide Deployments starten parallel — Seeder bootet einmal, hostet beide Torrents.
 4. Wenn Deployment 1 fertig ist: Torrent 1 wird unregistered, Seeder bleibt für Deployment 2.
 5. Wenn auch Deployment 2 fertig: Container wird automatisch entfernt.
@@ -66,6 +66,6 @@ Tabelle im Deployments-Tab:
 
 ## Nächste Schritte
 
-- [05 — Cloning](05-cloning.md) für die Grundlagen der Image-Pipeline.
-- [06 — Rollouts](06-rollouts.md) für staged Rollouts mit Fortschrittskontrolle.
+- [05 — Cloning](../05-cloning.md) für die Grundlagen der Image-Pipeline.
+- [06 — Rollouts](../06-rollouts.md) für staged Rollouts mit Fortschrittskontrolle.
 - [workflows/update-verteilen.md](update-verteilen.md) für den Fall, dass kein volles Image, sondern nur ein Delta ausgerollt werden soll.

@@ -17,24 +17,26 @@ Die Tools-ISO trägt das Provisioning-Script, den Agent-Binary, die VPN-Keys und
 2. Eintrag **„thinforge-tools.iso"** suchen
 3. **„Rebuild"** klicken (dauert ~1 Minute)
 
-## Schritt 2 — Client einschalten
+## Schritt 2 — MAC ermitteln und Client anlegen
+
+DHCP und PXE bedienen **nur angelegte Geräte** — eine unbekannte MAC wird ignoriert und bekommt weder eine IP noch die Boot-Kette. Der Client muss also **zuerst** angelegt werden, damit er anschließend überhaupt booten kann.
+
+1. **MAC-Adresse ermitteln** — vom Geräte-Aufkleber, aus dem BIOS/UEFI-Netzwerk-Screen oder aus deiner Inventarliste. (Nicht aus einem DHCP-Lease — solange das Gerät unbekannt ist, gibt es keins.)
+2. **Clients-Liste** ([03](../03-clients.md)) → **„+ Client hinzufügen"** → MAC eintragen (optional Gruppe, Raum und Inventardaten) → speichern. Für viele Geräte auf einmal: CSV-Import.
+
+## Schritt 3 — Client einschalten und provisionieren
 
 - Gerät an Strom + Netzwerk anschließen
 - Im BIOS/UEFI: PXE-Boot für den Netzwerk-Adapter aktivieren (bei den meisten Thin-Clients Default)
 - Booten
 
-Der Client bekommt per DHCP eine IP, lädt die PXE-Boot-Kette, bootet in die Tools-ISO und startet dort automatisch das Provisioning-Script.
+Weil die MAC jetzt bekannt ist, bekommt der Client per DHCP eine IP, lädt die PXE-Boot-Kette, bootet in die Tools-ISO und startet dort automatisch das Provisioning-Script.
 
 **Während das läuft** (ca. 3–5 Minuten):
-- DHCP-Lease erscheint unter [07 — Netzwerk → DHCP/PXE → Leases](../07-netzwerk.md#leases)
+- Der DHCP-Lease erscheint unter [07 — Netzwerk → DHCP/PXE → Leases](../07-netzwerk.md#leases) — praktisch, um zu prüfen, ob das angelegte Gerät eine IP bekommen hat
 - Das Provisioning-Script schreibt Partitionstabelle, installiert den Agent, holt die Baseline via Unicast/BitTorrent, konfiguriert VPN
 
-## Schritt 3 — Client meldet sich
-
-Nach dem Neustart ist der Agent aktiv und sendet den ersten Heartbeat. Der Client erscheint:
-
-1. **Clients-Liste** ([03](../03-clients.md)) — neuer Eintrag, Status „Online", Version entspricht der ausgerollten Baseline
-2. **Dashboard** — Client-Status-Balken-Segment „Online" um 1 hochgezählt
+Nach dem Neustart sendet der Agent Heartbeats. Da der Client bereits angelegt ist, werden sie sofort akzeptiert und das Gerät erscheint mit Status „Online" (Version = ausgerollte Baseline) in der Clients-Liste und im Dashboard.
 
 ## Schritt 4 — Zuweisen
 
@@ -48,7 +50,7 @@ Nach dem Neustart ist der Agent aktiv und sendet den ersten Heartbeat. Der Clien
 
 ## Stolperfallen
 
-- **Kein DHCP** → Switch-Konfiguration (IGMP/Helper), Server-Subnetz-Einstellung prüfen
+- **Kein DHCP** → Ist das Gerät angelegt? Unbekannte MACs bekommen kein DHCP. Sonst Switch-Konfiguration (IGMP/Helper) und Server-Subnetz-Einstellung prüfen
 - **Client bootet in BIOS-Menü statt PXE** → BIOS-Boot-Order checken, Secure-Boot ggf. deaktivieren für Legacy-PXE
 - **Provisioning-Script bricht ab** → TLS-Zertifikat im Tools-ISO alt? → Schritt 1 wiederholen
 - **Client erscheint mit falschem Hostname** → Das ist der DHCP-Hostname; beim ersten Heartbeat übernimmt der Agent den echten. Ein paar Minuten warten.

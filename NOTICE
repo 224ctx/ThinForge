@@ -1,48 +1,67 @@
 ThinForge
 Copyright (c) 2024-2026 Andreas Christ <info@thinforge.org>
 
-This product is composite software:
+ThinForge is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version ("GPL-3.0-or-later"). The full license text
+is in the LICENSE file.
 
-  - The ThinForge proprietary components (Rust backend, Go agent,
-    TypeScript frontend, Ansible assets, and associated tooling)
-    are proprietary. See LICENSE.
+ThinForge is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
 
-  - This product's container images bundle third-party binaries under
-    the GNU General Public License, Version 2 and Version 3, and
-    several permissive licenses. The directly integrated GPL v2
-    components are:
+This applies to all components authored by ThinForge: the Rust backend
+and all crates under crates/, the TypeScript / Vue frontend under
+frontend/, the Go agent under agent-go/, the Ansible assets, container
+build orchestration, shell scripts, Dockerfiles, compose files,
+database schemas and migrations, the tooling under LizenzTool/, and the
+documentation and design assets — unless a file explicitly declares a
+different license.
+
+Third-party components:
+
+  - The container images bundle third-party binaries under the GNU
+    General Public License, Version 2 and Version 3, and several
+    permissive licenses. The directly integrated GPL v2 components
+    are:
       * Partclone       — https://partclone.org/
       * EZIO            — https://github.com/tjjh89017/ezio
 
+    These remain licensed under GPL v2 only. They are separate
+    programs: ThinForge interacts with them exclusively through
+    process boundaries (subprocess invocation, gRPC, PXE-booted
+    independent operating systems) and does not link against them,
+    so each program stays under its own license.
+
     Additionally, container images install GPL v2-, GPL v3-, LGPL-,
     and permissively-licensed packages from the Alpine Linux
-    community repositories (e.g. qemu, btrfs-progs, dnsmasq, grub,
-    parted, coreutils, bash, wget, ntfs-3g, udpcast, libtorrent-
-    rasterbar). See THIRD_PARTY_LICENSES.md for the authoritative
-    list.
+    repositories (e.g. qemu, btrfs-progs, dnsmasq, grub, parted,
+    coreutils, bash, wget, ntfs-3g, udpcast, libtorrent-rasterbar).
+    See THIRD_PARTY_LICENSES.md for the authoritative list.
 
-    Additionally, ThinForge orchestrates but does not distribute:
+    ThinForge orchestrates but does not distribute:
       * Clonezilla Live — https://clonezilla.org/
-        (downloaded on demand at the customer site from upstream)
+        (downloaded on demand at the deployment site from upstream)
       * DRBL            — https://drbl.org/
         (referenced in source repository only; not shipped)
 
-    The proprietary components interact with these GPL components
-    exclusively through process boundaries (subprocess invocation,
-    gRPC, PXE-booted independent operating systems). No static or
-    dynamic linking against GPL-licensed code occurs in the
-    proprietary ThinForge components.
+  - The Rust, Go, and TypeScript components depend on open-source
+    libraries under MIT, Apache-2.0, BSD, ISC, and similar licenses,
+    as declared in Cargo.lock, agent-go/go.mod, and
+    frontend/package.json.
 
 For full licensing information, the texts of the GPL v2 and GPL v3,
-and a written offer for the corresponding source code of every GPL
+and a written offer for the corresponding source code of every GPL v2
 component (valid three years from the date of distribution), see:
 
-  LICENSE                   — ThinForge license notice (top-level)
+  LICENSE                   — GNU GPL v3 (ThinForge's license)
   THIRD_PARTY_LICENSES.md   — Summary of third-party licenses
   LICENSES/GPL-2.0.txt      — Full GPL v2 text
   LICENSES/GPL-3.0.txt      — Full GPL v3 text
   LICENSES/*.md             — Per-component license metadata
-  WRITTEN_OFFER.md          — GPL v2/v3 §3(b) written source offer
+  WRITTEN_OFFER.md          — GPL §3(b) written source offer
 
 Corresponding source of every GPL binary that ThinForge distributes
 is shipped in this release under `sources/`:
@@ -50,3 +69,5 @@ is shipped in this release under `sources/`:
   sources/ezio-snapshot.tar.gz     — EZIO source
 
 SHA-256 values are pinned in sources/README.md.
+
+Repository: https://git.thinforge.org/thinforge/ThinForge-Dev

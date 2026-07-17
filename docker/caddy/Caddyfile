@@ -1,52 +1,24 @@
 # ThinForge Caddyfile
 #
 # Caddy runs in `network_mode: host` so it can bind directly to the
-# client-network IP for PXE traffic. backend/frontend are published on
-# `127.0.0.1:<port>` of the host, which Caddy reaches via loopback
-# (no compose-internal DNS in host-mode).
+# client-network IP for PXE traffic, the management-network IP for the
+# admin UI, and the WireGuard overlay IP for the (UI-less) agent API.
+# backend/frontend are published on `127.0.0.1:<port>` of the host,
+# which Caddy reaches via loopback (no compose-internal DNS in
+# host-mode).
 #
-# The IP-bound `:80` block lives under `conf.d/listeners.caddy`, written
-# by `thinforge-services::caddy_service` from `dhcp_config.rollout_ip`.
-# A wildcard `import` keeps this file static so a fresh install with no
-# rollout_ip yet still validates and starts.
-
-:443 {
-	tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key
-
-	handle_path /novnc/* {
-		reverse_proxy 127.0.0.1:6081
-	}
-
-	# DHCP-lease-event webhook: loopback-only. Caddy MUST NOT proxy this path;
-	# that's the entire authentication model (only dnsmasq via 127.0.0.1 may
-	# reach it). Returning 404 keeps the endpoint invisible to any LAN or
-	# browser caller.
-	handle /api/v1/dhcp/* {
-		respond "Not Found" 404
-	}
-
-	handle /api/v1/terminal/* {
-		reverse_proxy 127.0.0.1:8000
-	}
-
-	handle /api/v1/remote-desktop/* {
-		reverse_proxy 127.0.0.1:8000
-	}
-
-	handle /api/* {
-		reverse_proxy 127.0.0.1:8000
-	}
-
-	handle {
-		reverse_proxy 127.0.0.1:3000
-	}
-}
-
-# Port 80 wird ausschliesslich an die Client-Netz-IP gebunden — der
-# IP-bound Block lebt unter conf.d/listeners.caddy und wird vom Backend
-# aus dhcp_config.rollout_ip gerendert. Das Management-Netz hat damit
-# auf :80 *gar nichts* (Browser-Admins muessen https:// nutzen, was eh
-# der Normalweg ist). Ein globaler `:80`-Block hier wuerde mit dem
-# IP-bound Block einen Bind-Konflikt auf der rollout_ip:80-Socket
-# verursachen.
+# All site blocks (`<rollout_ip>:80`, `<mgmt_ip>:443`, `<vpn_ip>:443`)
+# are written by `thinforge-services::caddy_service` to
+# `conf.d/listeners.caddy` based on runtime-detected IPs (default
+# gateway, DHCP-config, WireGuard tunnel-config). The wildcard import
+# below pulls them in.
+#
+# Bootstrap: on first boot before any IPs are known, listeners.caddy
+# emits an unbound :443 fallback so the Setup-Wizard remains reachable.
+# Once the wizard saves a config, the listeners are re-rendered with
+# concrete `bind` directives and the unbound fallback disappears.
+#
+# A globaler `:80`-Block hier wuerde mit dem IP-bound `:80`-Block in
+# listeners.caddy einen Bind-Konflikt auf der rollout_ip:80-Socket
+# verursachen — daher absichtlich nicht definiert.
 import conf.d/*.caddy

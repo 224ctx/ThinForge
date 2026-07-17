@@ -33,7 +33,7 @@ if [ "$MODE" = "iso" ]; then
 fi
 
 # Curl-Bootstrap-Modus wurde aus Sicherheitsgruenden entfernt
-# (siehe docs/security-audit-2026-04-18.md F-CR-01). Tools-ISO ist die
+# (siehe docs/security/security-audit-2026-04-18.md F-CR-01). Tools-ISO ist die
 # einzige SSH-Key-Quelle.
 
 if [ -z "$SSH_KEY" ]; then

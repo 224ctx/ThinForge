@@ -1,5 +1,9 @@
 # ThinForge Changelog
 
+## 2026-07-13
+
+- **ThinForge ist jetzt Open Source (GPL-3.0-or-later)** — Die gesamte von ThinForge stammende Software — Server-Dienste, Verwaltungsoberfläche, Client-Agent und Werkzeuge — steht ab sofort unter der GNU General Public License, Version 3 (oder, nach Ihrer Wahl, jeder späteren Version). Die Datei `LICENSE` enthält jetzt den vollständigen GPLv3-Text; `NOTICE` erklärt die Lizenzlage inklusive der weiterhin unter GPL v2 stehenden Drittkomponenten (Partclone, EZIO). Am Betrieb, am Funktionsumfang und an den bestehenden Wartungs- und VPN-Angeboten ändert sich nichts — neu ist, dass der Quellcode offen einsehbar, prüfbar und unter den Bedingungen der GPL weiterverwendbar ist.
+
 ## 2026-06-23
 
 - **Einheitlicher Grauton für ausgeklappte Detailbereiche** — Ausgeklappte Detailbereiche (etwa die Liste der noch ausstehenden Clients eines Klons im Tab *Klone*) und einige Übersichtsflächen hatten im dunklen Erscheinungsbild einen fast weißen Hintergrund, der sich unschön abhob. Sie verwenden jetzt überall denselben, zum Design passenden Grauton — sowohl im dunklen als auch im hellen Erscheinungsbild. Wirkt nach Aktualisierung der Verwaltungsoberfläche.
@@ -1224,7 +1228,7 @@
     `"No such file or directory (os error 2)"` gewarnt und das Delta-Signing
     war komplett broken.
 
-- **Cert-Rotation (neu, Plan in docs/Rust-Todo.md)** — - **Minisign-signierte TLS-Cert-Rotation** — Neue Chain-of-Trust: der
+- **Cert-Rotation (neu, Plan in docs/todo/Rust-Todo.md)** — - **Minisign-signierte TLS-Cert-Rotation** — Neue Chain-of-Trust: der
     Minisign-Key ist Root-of-Trust (baked into Tools-ISO), der TLS-Cert ist
     delegiert und rotierbar. Clients pinnen `/data/thinforge/server.crt` und
     schicken dessen SHA-256 in jedem Heartbeat mit. Wenn der Server-Cert

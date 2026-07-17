@@ -2,6 +2,8 @@
 
 A **client** in ThinForge is a physical thin PC with an installed agent that regularly contacts the server via heartbeat. All management actions — image update, rollback, remote access, group assignment — act on client objects.
 
+> **Recommended system:** For the thin clients, Debian is the preferred choice — installed as a minimal system with XFCE as the graphical desktop. In principle, any Linux distribution works.
+
 ## Clients list
 
 Menu left, **Clients**. The table shows all registered devices.
@@ -14,11 +16,11 @@ Menu left, **Clients**. The table shows all registered devices.
 | Hostname | Computer name reported by the agent |
 | IP | Current management IP (VPN or LAN) |
 | MAC | Primary NIC |
-| Version | Currently-installed clone (`v1.003`, …) |
+| Version | Currently-installed clone (`v2026.06.22-004`, …) |
 | Pending | Target version during a running update |
 | Group | Assigned group ([04](04-groups.md)) |
 | Last heartbeat | Timestamp of the most recent report |
-| Boot mode | `agent` (normal), `deploy` (image being installed), `rollback` (being rolled back), `rescue` (diagnostic) |
+| Boot mode | Local (normal), Deploy (image being installed), Capture (image capture), No Config |
 
 ### Filtering and searching
 
@@ -35,7 +37,7 @@ Select multiple clients via checkbox → actions at the top of the bar:
 - **Plan rollout** — directly with these clients as targets
 - **Reboot** — via agent
 - **Rollback** — to the previous version
-- **Delete** — removes from the database (the physical client remains)
+- **Delete** — removes the client from management (the physical PC remains); it does not come back on its own and must be re-created manually using its MAC address to manage it again
 
 ## Client detail
 
@@ -54,7 +56,6 @@ Clicking a row opens the detail view with tabs:
 - **Start rollout** — single deployment to this client
 - **Rollback** — revert to the predecessor clone
 - **Reboot / shutdown**
-- **Request rescue boot** — enters diagnostic mode on next reboot
 - **Remove from inventory**
 
 ### Tab: History
@@ -71,7 +72,7 @@ All background jobs targeted at this client (updates, playbooks, captures) with 
 
 ## Creating a new client
 
-In practice clients appear **automatically** on the first heartbeat — a PXE-booted device that checks in is added to the list. Manual creation via **"+ Add client"** is only needed when a client should be reserved in advance (e.g. its MAC and desired group are known before hardware arrives).
+Clients are created **manually** — there is no automatic registration of new devices. Use **"+ Add client"** to enter the device's **MAC address** (required) and, optionally, a group, room and inventory details. Only a created device is accepted by the server; heartbeats from unknown MAC addresses are rejected. For bulk creation, use the CSV import (see below).
 
 Step-by-step: see [workflows/first-client.md](workflows/first-client.md).
 
@@ -98,18 +99,18 @@ For bulk creation or backup purposes.
 mac_address;gruppe_name;inventarnummer;raum;benutzer;kaufdatum;garantiezeit_monate;rechnungsnummer;lieferant
 ```
 
-Only `mac_address` is required. Further hardware fields (serial number, CPU, model, etc.) are optional; an exported CSV can be re-imported as-is. See [client-csv-import-export.md](../../docs/client-csv-import-export.md) for the full column reference and supported header aliases.
+Only `mac_address` is required. Further hardware fields (serial number, CPU, model, etc.) are optional; an exported CSV can be re-imported as-is. See [client-csv-import-export.md](../../docs/reference/client-csv-import-export.md) for the full column reference and supported header aliases.
 
 ## Boot modes
 
-Every client has a **boot mode** controlling what it does on its next start. The mode is transmitted to the client via heartbeat and automatically reset to `agent` after execution.
+Every client has a **boot mode** controlling what it does on its next start. The mode is transmitted to the client via heartbeat and automatically reset to local boot after execution.
 
 | Mode | Purpose |
 |------|---------|
-| `agent` | Normal operation — OS starts, agent checks in, everything as usual |
-| `deploy` | On next reboot, a clone is installed (in the background via the agent, or via PXE deploy boot) |
-| `rollback` | On next reboot, the previous version is restored |
-| `rescue` | Client boots into a minimal recovery environment (manual diagnostics) |
+| Local | Normal operation — the client boots from its local disk |
+| Deploy | On next start, an image is installed |
+| Capture | On next start, the device's disk is captured as an image |
+| No Config | No boot configuration is set — the client just boots normally |
 
 The mode can be set from the client detail page or via a rollout.
 

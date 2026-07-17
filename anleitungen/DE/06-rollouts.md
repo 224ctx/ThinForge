@@ -35,7 +35,7 @@ Klick auf eine Zeile öffnet die Rollout-Detailseite.
 ### Tab 2 — Ziel
 
 - **Modus**: Gruppe oder Client-Liste
-- Bei Gruppe: Gruppe wählen, Checkbox „inklusive Untergruppen"
+- Bei Gruppe: Gruppe wählen — die Aktion trifft nur die direkt zugewiesenen Clients der Gruppe (keine Untergruppen)
 - Bei Liste: Clients aus Tabelle markieren (gleiche Filter-Optionen wie Client-Liste)
 
 ### Tab 3 — Image + Methode
@@ -44,13 +44,14 @@ Klick auf eine Zeile öffnet die Rollout-Detailseite.
 - **Deployment-Methode**:
   - **Unicast** — jeder Client lädt direkt vom Server. Einfach, funktioniert immer, bei > 50 Clients im selben LAN wird Server-Uplink zum Flaschenhals.
   - **Multicast** — Server streamt einmal im UDP-Multicast, alle Clients empfangen parallel. Super für große Rollouts im gleichen Subnetz. Nur LAN, nicht über VPN/geroutete Netze.
-  - **BitTorrent** — Clients saugen den Clone als Torrent, teilen sich Bandbreite untereinander. Gut für viele Clients über VPN oder in Außenstellen. Nur **eines** gleichzeitig wegen fester Tracker-Ports.
+  - **BitTorrent** — Clients saugen den Clone als Torrent, teilen sich Bandbreite untereinander. Gut für viele Clients im selben LAN. Nur **eines** gleichzeitig wegen fester Tracker-Ports.
 
 ### Tab 4 — Zeitplan
 
 - **Sofort starten** — Rollout beginnt nach Bestätigung
-- **Geplant** — Datum/Uhrzeit setzen; Rollout wird vom Scheduler zum Zeitpunkt gestartet
+- **Geplant** — Datum/Uhrzeit setzen (z. B. 23:00 Uhr); Rollout wird vom Scheduler zum Zeitpunkt gestartet
 - **Manuell starten** — Rollout im Status „draft" speichern, später manuell per Button
+- **Wake-on-LAN** — nur bei einem **geplanten** Rollout aktivierbar: die Zielgeräte werden 1–60 Minuten vor dem Start automatisch per Magic-Packet eingeschaltet (PXE-Boot erforderlich). Ohne gesetzten Zeitpunkt ist die WoL-Option nicht verfügbar.
 
 ### Speichern
 
@@ -60,7 +61,7 @@ Abhängig von der Zeitplan-Option wird der Rollout direkt aktiv, wartet auf Sche
 
 Die Detailseite zeigt:
 
-- **Kopfleiste** — Status, Fortschritt, Aktions-Buttons (Pause / Cancel / Rollback)
+- **Kopfleiste** — Status, Fortschritt, Aktions-Buttons (Cancel / Rollback)
 - **Client-Liste mit Einzelstatus**:
   - `pending` — wartet auf Start
   - `deploying` — Client zieht und installiert gerade
@@ -68,13 +69,9 @@ Die Detailseite zeigt:
   - `failed` — Fehler, Details in Client-Historie
   - `cancelled` — vom Operator abgebrochen
 - **Live-Logs** — Backend-Logs zum Rollout (auch in Tasks / Logs sichtbar)
-- **Zeitstrahl** — Events (gestartet, Pause, abgeschlossen)
+- **Zeitstrahl** — Events (gestartet, abgeschlossen)
 
 ## Rollout-Aktionen
-
-### Pausieren
-
-Stoppt neue Client-Starts, bereits laufende Installationen laufen zu Ende. Resume jederzeit möglich. Hilfreich, wenn man während des Rollouts Probleme beobachtet und erst prüfen will.
 
 ### Abbrechen
 
@@ -88,7 +85,7 @@ Auf der Detailseite der Button **„Rollback"** — leitet alle in diesem Rollou
 
 | | Unicast | Multicast | BitTorrent |
 |---|---------|-----------|------------|
-| Netzwerk | LAN + VPN | nur LAN | LAN + VPN |
+| Netzwerk | nur LAN | nur LAN | nur LAN |
 | Skalierung | ~50 Clients | hunderte | hunderte |
 | Parallel-Rollouts möglich | ja (Server-CPU limitiert) | ja (pro Subnetz) | **nein** (Tracker-Port-Konflikt) |
 | Wenn einzelne Clients fehlen | unproblematisch | Client muss gleichzeitig booten | Client kann später nachziehen |
@@ -102,7 +99,7 @@ Auf der Detailseite der Button **„Rollback"** — leitet alle in diesem Rollou
 
 ## Rollouts und VPN
 
-Für VPN-Clients sind **Unicast** und **BitTorrent** die relevanten Optionen. Multicast funktioniert nur im lokalen Subnetz. Bei gemischten Zielen (LAN-Clients + VPN-Clients in einer Gruppe) wählt man meist Unicast — einfach, ohne Konfig-Fallstricke.
+Die drei Verteilmethoden (Unicast, Multicast, BitTorrent) verteilen vollständige Clone-Images und laufen ausschließlich im lokalen Netz (LAN). Über das VPN werden nur **Delta-Updates** unterstützt — Clients in Homeoffice/Außenstellen erhalten Änderungen also als Delta, nicht als vollständigen Neu-Klon.
 
 ## Nächste Schritte
 

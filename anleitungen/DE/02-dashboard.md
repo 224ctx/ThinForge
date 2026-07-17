@@ -29,19 +29,19 @@ Balken mit Verteilung nach Status:
 | Klont | orange | Client installiert gerade ein Image |
 | Fehler | rot | Agent meldet Fehlerzustand |
 
-Klick auf einen Segment-Abschnitt filtert die Clients-Liste entsprechend.
+Die Leiste ist eine statische Visualisierung. Verlinkt sind nur die Gruppen und der Verfügbarkeits-Bericht (Report-Symbol); die Clients-Liste filterst du über deren eigenes Status-Dropdown.
 
 ### Rollouts
 
-Aktive und kürzlich abgeschlossene Rollouts. Zeigt pro Rollout: Ziel-Gruppe, Image-Version, Fortschritt (x/y Clients), Start-/End-Zeit. Klick springt zur Rollout-Detailseite ([06](06-rollouts.md)).
+Aktive (und pausierte) Rollouts. Zeigt pro Rollout: Image und Fortschritt (x/y Clients). Klick springt zur Rollout-Detailseite ([06](06-rollouts.md)).
 
-### Compliance
+### Systemzustand
 
-Anteil der Clients, die auf der aktuell gewünschten Version laufen. Nützlich bei Rollouts oder nach Außenstellen-Synchronisierung. Klick auf den Wert filtert die Clients-Liste auf die abweichenden Geräte.
+Listet Compliance-Probleme: Clients ohne Gruppe, ohne Image oder mit abgelaufener Garantie. Der Report-Button führt zum Compliance-Bericht.
 
 ### Alerts
 
-Offene Alarmmeldungen — z. B. wenn ein Client mehrfach in Folge keinen Heartbeat sendet, Disk-Füllstand kritisch wird, oder ein Update-Rollout failt. Mit „Quittieren"/„Auflösen" pro Alert umsetzbar.
+Offene Vorfälle — z. B. wenn ein Client mehrfach in Folge keinen Heartbeat sendet, Disk-Füllstand kritisch wird, oder ein Update-Rollout failt. Pro Zeile siehst du Client, Bedingung, Status und Seit. Ein Klick öffnet die Client-Detailansicht; über „Alle anzeigen" gelangst du zu Einstellungen → Alarme, wo sich Vorfälle bestätigen und lösen lassen.
 
 ### Recent Clients
 
@@ -49,7 +49,7 @@ Die zuletzt aktiv gewordenen Geräte — oft hilfreich nach einem größeren Dep
 
 ### Disk Usage
 
-Fortschrittsbalken für den ThinForge-Daten-Ordner (Clones, Deltas, Captures, ISOs). Bei ≥ 85 % werden Kontrastfarben rot; Zeit für Altlasten aufzuräumen oder Plattenplatz nachzulegen.
+Fortschrittsbalken für den ThinForge-Daten-Ordner (Clones, Deltas, Captures, ISOs). Ab ≥ 75 % wird der Balken gelb als Warnung, ab ≥ 90 % rot; Zeit für Altlasten aufzuräumen oder Plattenplatz nachzulegen.
 
 ### Running Tasks
 
@@ -63,10 +63,10 @@ Das **Zahnrad-Icon** oben rechts öffnet „Dashboard-Einstellungen":
 - **Reihenfolge** per Drag-&-Drop
 - **Zurücksetzen** auf Werkseinstellung
 
-Einstellungen sind pro Benutzer gespeichert — jeder Operator kann sich das Dashboard auf seinen Workflow zuschneiden.
+Die Einstellungen werden lokal im Browser gespeichert — die Anpassung gilt also pro Gerät und Browser, nicht kontoübergreifend.
 
 ## Tipps für den Alltag
 
 - **„Inaktiv"-Kachel gelb/rot?** Erst in die Services-Detailansicht schauen, bevor man panisch wird — `unhealthy` hat oft triviale Ursachen (noch im `start_period`, nach einem Reboot etc.).
 - **Client-Status-Balken plötzlich mit vielen „Offline"?** Meist ein Netzwerk-Problem zentral (VPN-Gateway down, DHCP-Lease-Aussetzer). Logs checken ([08](08-tasks-logs.md#logs)).
-- **Rollouts-Kachel zeigt „In Fortschritt" aber nichts passiert?** Die Kachel aktualisiert sich nicht live — Browser neu laden oder Refresh-Button auf der Rollout-Detailseite.
+- **Rollouts-Kachel zeigt „In Fortschritt" aber nichts passiert?** Status-, Alarm- und Disk-Kacheln aktualisieren sich etwa alle 30 Sekunden; Rollouts, Services, Systemzustand und Recent Clients hingegen erst beim Neuladen. Bei einem scheinbar stehenden Rollout den Browser neu laden oder den Refresh-Button auf der Rollout-Detailseite nutzen.

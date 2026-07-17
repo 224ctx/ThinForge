@@ -404,7 +404,7 @@ TSYNC
         bash "$INSTALL_SCRIPT"
     else
         # Curl-Bootstrap-Modus wurde aus Sicherheitsgruenden entfernt
-        # (siehe docs/security-audit-2026-04-18.md F-CR-01). Tools-ISO ist
+        # (siehe docs/security/security-audit-2026-04-18.md F-CR-01). Tools-ISO ist
         # die einzige Provisioning-Quelle.
         warn "Agent script not found on ISO ($INSTALL_SCRIPT)."
         warn "Tools ISO is incomplete — rebuild it and boot again."

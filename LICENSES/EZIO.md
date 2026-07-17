@@ -12,7 +12,7 @@ EZIO runs as a **standalone daemon**. Communication with ThinForge happens exclu
 
 - `docker/bt-seeder/Dockerfile` (Stage 1) builds EZIO from `quellinfos/ezio/` using CMake. Stage 2 copies only the resulting `/usr/local/sbin/ezio` binary into the runtime image.
 - Python utilities (`quellinfos/ezio/utils/*.py`) speak to the EZIO daemon via generated gRPC stubs (`ezio_pb2.py`, `ezio_pb2_grpc.py`).
-- ThinForge does **not** link against EZIO code and does **not** statically combine EZIO with the Rust binary or the proprietary Go agent.
+- ThinForge does **not** link against EZIO code and does **not** statically combine EZIO with the Rust binary or the Go agent.
 
 ## Compliance status
 

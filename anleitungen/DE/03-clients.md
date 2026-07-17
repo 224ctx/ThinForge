@@ -2,6 +2,8 @@
 
 Ein **Client** in ThinForge ist ein physischer Thin-PC mit installiertem Agent, der regelmäßig per Heartbeat Kontakt zum Server hält. Alle Verwaltungs-Aktionen — Image-Update, Rollback, Remote-Zugriff, Gruppen-Zuweisung — laufen auf Client-Objekte.
 
+> **Empfohlenes System:** Für die Thin-Clients ist Debian die bevorzugte Wahl — installiert als Minimal-System mit XFCE als grafischer Oberfläche. Grundsätzlich funktioniert aber jede Linux-Distribution.
+
 ## Clients-Liste
 
 Menü links **Clients**. Die Tabelle zeigt alle registrierten Geräte.
@@ -14,11 +16,11 @@ Menü links **Clients**. Die Tabelle zeigt alle registrierten Geräte.
 | Hostname | Vom Agent gemeldeter Rechnername |
 | IP | Aktuelle Management-IP (VPN oder LAN) |
 | MAC | Primäre Netzwerkkarte |
-| Version | Aktuell installierter Clone (`v1.003`, …) |
+| Version | Aktuell installierter Clone (`v2026.06.22-004`, …) |
 | Pending | Zielversion bei laufendem Update |
 | Gruppe | Zugewiesene Gruppe ([04](04-gruppen.md)) |
 | Letzter Heartbeat | Timestamp der letzten Meldung |
-| Boot-Modus | `agent` (normal), `deploy` (Image wird installiert), `rollback` (Zurücksetzen läuft), `rescue` (Diagnose) |
+| Boot-Modus | Lokal (normal), Deploy (Image wird installiert), Capture (Image-Aufnahme), Keine Config |
 
 ### Filter und Suche
 
@@ -35,7 +37,7 @@ Mehrere Clients per Checkbox markieren → Aktionen oben in der Leiste:
 - **Rollout planen** — direkt mit diesen Clients als Ziel
 - **Neustart** — über Agent
 - **Rollback** — auf vorherige Version
-- **Löschen** — entfernt aus der DB (Client-PC bleibt physisch bestehen)
+- **Löschen** — entfernt den Client aus der Verwaltung (der physische PC bleibt bestehen); er taucht nicht von selbst wieder auf und muss zum erneuten Verwalten manuell mit seiner MAC-Adresse neu angelegt werden
 
 ## Client-Detail
 
@@ -54,7 +56,6 @@ Klick auf eine Zeile öffnet die Detail-Ansicht mit Tabs:
 - **Rollout starten** — einzelnes Deployment auf diesen Client
 - **Rollback** — auf den Vorgänger-Clone zurück
 - **Neustart / Herunterfahren**
-- **Rescue-Boot anfordern** — beim nächsten Reboot in Diagnose-Modus
 - **Aus Inventar entfernen**
 
 ### Tab: Historie
@@ -71,7 +72,7 @@ Alle auf diesen Client gerichteten Hintergrundjobs (Updates, Playbooks, Captures
 
 ## Neuen Client anlegen
 
-In der Praxis entstehen Clients **automatisch** beim ersten Heartbeat des Agenten — sobald ein PXE-gebootetes Gerät sich meldet, wird es in der Liste sichtbar. Manuelles Anlegen per **„+ Client hinzufügen"** ist nur nötig, wenn ein Client vorab reserviert werden soll (z. B. MAC und gewünschte Gruppe schon vor Hardware-Anlieferung).
+Clients werden **manuell** angelegt — eine automatische Registrierung neuer Geräte gibt es nicht. Über **„+ Client hinzufügen"** trägst du die **MAC-Adresse** ein (Pflichtfeld) und optional Gruppe, Raum und Inventardaten. Erst ein angelegtes Gerät wird vom Server akzeptiert; Heartbeats von unbekannten MAC-Adressen werden abgewiesen. Für die Massen-Anlage gibt es den CSV-Import (siehe unten).
 
 Schritt-für-Schritt siehe [workflows/erster-client.md](workflows/erster-client.md).
 
@@ -98,18 +99,18 @@ Für Massen-Anlage oder Backup-Zwecke.
 mac_address;gruppe_name;inventarnummer;raum;benutzer;kaufdatum;garantiezeit_monate;rechnungsnummer;lieferant
 ```
 
-Nur `mac_address` ist Pflicht. Weitere Hardware-Felder (Seriennummer, CPU, Modell etc.) sind optional; ein per Export erzeugtes CSV kann direkt wieder importiert werden. Siehe [client-csv-import-export.md](../../docs/client-csv-import-export.md) für die vollständige Spaltenreferenz und unterstützte Header-Aliase.
+Nur `mac_address` ist Pflicht. Weitere Hardware-Felder (Seriennummer, CPU, Modell etc.) sind optional; ein per Export erzeugtes CSV kann direkt wieder importiert werden. Siehe [client-csv-import-export.md](../../docs/reference/client-csv-import-export.md) für die vollständige Spaltenreferenz und unterstützte Header-Aliase.
 
 ## Boot-Modi
 
-Jeder Client hat einen **Boot-Modus**, der steuert, was er beim nächsten Start tut. Der Modus wird per Heartbeat zum Client übertragen und nach Ausführung automatisch auf `agent` zurückgesetzt.
+Jeder Client hat einen **Boot-Modus**, der steuert, was er beim nächsten Start tut. Der Modus wird per Heartbeat zum Client übertragen und nach Ausführung automatisch auf Lokal-Boot zurückgesetzt.
 
 | Modus | Zweck |
 |-------|-------|
-| `agent` | Normaler Betrieb — OS startet, Agent meldet sich, alles wie gewohnt |
-| `deploy` | Beim nächsten Reboot wird ein Clone installiert (im Hintergrund via Agent, oder via PXE-Deploy-Boot) |
-| `rollback` | Beim nächsten Reboot wird auf die Vorversion zurückgesetzt |
-| `rescue` | Client bootet in minimal-Recovery-Umgebung (für manuelle Diagnose) |
+| Lokal | Normaler Betrieb — der Client bootet vom lokalen Datenträger |
+| Deploy | Beim nächsten Start wird ein Image installiert |
+| Capture | Beim nächsten Start wird der Datenträger des Geräts als Image aufgenommen |
+| Keine Config | Es ist keine Boot-Konfiguration hinterlegt — der Client bootet normal weiter |
 
 Setzen lässt sich der Modus aus der Client-Detail-Seite oder per Rollout.
 

@@ -213,13 +213,23 @@ configure_sudo_users() {
         local rows=()
         for ucol in "${users[@]}"; do rows+=(FALSE "$ucol"); done
         if command -v yad >/dev/null 2>&1; then
+            # WICHTIG: yad gibt bei OK nur die MARKIERTE Cursor-Zeile aus,
+            # nicht die angehakten Checkboxen. Daher --print-all und danach
+            # die TRUE-Zeilen filtern — mit --print-column=2 kam die Auswahl
+            # nie an (Dialog erschien, Ergebnis blieb leer, kein sudo-Grant).
             raw=$(DISPLAY="$disp" XAUTHORITY="$xauth" LANG=C.UTF-8 NO_AT_BRIDGE=1 \
                     yad --list --checklist --center --width=460 --height=380 \
                         --title="ThinForge — sudo-Rechte" \
                         --text="Welche lokalen Benutzer sollen sudo-Rechte erhalten?\n(nichts auswaehlen = niemand)" \
                         --column="Auswahl:CHK" --column="Benutzer:TEXT" \
-                        --separator=$'\n' --print-column=2 \
+                        --separator="|" --print-all \
                         "${rows[@]}") && rc=0 || rc=$?
+            if [ "$rc" -eq 0 ] && [ -n "$raw" ]; then
+                local chk uname rest
+                while IFS='|' read -r chk uname rest; do
+                    [ "$chk" = "TRUE" ] && [ -n "$uname" ] && selected+=("$uname")
+                done <<< "$raw"
+            fi
         else
             raw=$(DISPLAY="$disp" XAUTHORITY="$xauth" LANG=C.UTF-8 NO_AT_BRIDGE=1 \
                     zenity --list --checklist --width=460 --height=380 \
@@ -227,8 +237,8 @@ configure_sudo_users() {
                         --text="Welche lokalen Benutzer sollen sudo-Rechte erhalten?" \
                         --column="Auswahl" --column="Benutzer" \
                         --separator=$'\n' "${rows[@]}") && rc=0 || rc=$?
+            [ "$rc" -eq 0 ] && [ -n "$raw" ] && mapfile -t selected <<< "$raw"
         fi
-        [ "$rc" -eq 0 ] && [ -n "$raw" ] && mapfile -t selected <<< "$raw"
         log "  selection shown on display ${disp} (as $(id -un))."
     elif [ -t 0 ] && command -v whiptail >/dev/null 2>&1; then
         local wt=()
@@ -265,6 +275,21 @@ configure_sudo_users() {
     if visudo -cf "$tmp" >/dev/null 2>&1; then
         install -m 0440 -o root -g root "$tmp" "$sudoers_file"
         log "  sudo granted to: ${selected[*]} (-> $sudoers_file)"
+        # Zusaetzlich in die Gruppe 'sudo' aufnehmen (wie Beta-installer.sh):
+        # polkit/Desktop-Komponenten pruefen die Gruppenmitgliedschaft, nicht
+        # sudoers.d. Auf Minimal-Installationen mit gesetztem root-Passwort
+        # fehlt das sudo-Paket selbst — dann nachinstallieren.
+        command -v sudo >/dev/null 2>&1 \
+            || apt-get install -y -qq sudo \
+            || warn "  'sudo' package could not be installed."
+        for s in "${selected[@]}"; do
+            [ -n "$s" ] || continue
+            if usermod -aG sudo "$s" 2>/dev/null; then
+                log "  '$s' added to group 'sudo' (effective at next login)."
+            else
+                warn "  could not add '$s' to group 'sudo'."
+            fi
+        done
         # Den (ersten) ausgewaehlten sudo-User zugleich als Autologin einrichten.
         local autologin_user="${selected[0]}"
         [ "${#selected[@]}" -gt 1 ] && warn "  autologin targets one user -> '${autologin_user}' (others: sudo only)."
@@ -297,6 +322,73 @@ autologin-user=${user}
 autologin-user-timeout=0
 AUTOLOGIN
     log "  Autologin configured for '${user}' (LightDM; effective next boot)."
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# Wallpaper sofort in laufenden Desktop-Sessions anwenden
+# ══════════════════════════════════════════════════════════════════════════
+# Das Branding (DistroTweaks) installiert /usr/local/bin/thinforge-set-
+# wallpaper.sh als XDG-Autostart — der greift aber erst beim NAECHSTEN Login.
+# xfconf/gsettings wirken nur innerhalb der User-Session (als root gestartet
+# landen sie auf dem falschen DBus). Diese Funktion startet den Helper daher
+# einmal pro bereits laufender grafischer Session: als der jeweilige User,
+# mit der Umgebung (DISPLAY, DBus, XDG_CURRENT_DESKTOP) seiner Session.
+apply_wallpaper_to_active_sessions() {
+    local helper=/usr/local/bin/thinforge-set-wallpaper.sh
+    if [ ! -x "$helper" ]; then
+        warn "  wallpaper helper not installed ($helper) — immediate apply skipped."
+        return 0
+    fi
+    command -v loginctl >/dev/null 2>&1 || return 0
+
+    local sid s_type s_state s_user uname leader envpid
+    while read -r sid; do
+        [ -n "$sid" ] || continue
+        s_type=$(loginctl show-session "$sid" -p Type --value 2>/dev/null)
+        case "$s_type" in x11|wayland) ;; *) continue ;; esac
+        s_state=$(loginctl show-session "$sid" -p State --value 2>/dev/null)
+        { [ "$s_state" = "active" ] || [ "$s_state" = "online" ]; } || continue
+        s_user=$(loginctl show-session "$sid" -p User --value 2>/dev/null)
+        [ "$s_user" -ge 1000 ] 2>/dev/null || continue
+        uname=$(loginctl show-session "$sid" -p Name --value 2>/dev/null)
+        [ -n "$uname" ] || uname=$(getent passwd "$s_user" | cut -d: -f1 2>/dev/null)
+        [ -n "$uname" ] || continue
+
+        # Session-Umgebung besorgen: bevorzugt aus dem Session-Prozess der DE
+        # (xfce4-session kennt DISPLAY/DBus sicher), sonst Session-Leader.
+        envpid=$(pgrep -u "$uname" -x xfce4-session 2>/dev/null | head -1)
+        [ -n "$envpid" ] || envpid=$(pgrep -u "$uname" -x xfdesktop 2>/dev/null | head -1)
+        if [ -z "$envpid" ]; then
+            leader=$(loginctl show-session "$sid" -p Leader --value 2>/dev/null)
+            [ -n "$leader" ] && envpid="$leader"
+        fi
+        [ -n "$envpid" ] && [ -r "/proc/$envpid/environ" ] || continue
+
+        local envargs=() var val
+        for var in DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS XDG_CURRENT_DESKTOP XDG_RUNTIME_DIR; do
+            val=$(tr '\0' '\n' < "/proc/$envpid/environ" 2>/dev/null | sed -n "s/^${var}=//p" | head -1)
+            [ -n "$val" ] && envargs+=("${var}=${val}")
+        done
+        # Fallbacks: ohne DISPLAY kann der Helper nichts tun; ohne
+        # XDG_CURRENT_DESKTOP wuerde er den falschen DE-Zweig waehlen.
+        case " ${envargs[*]-} " in *" DISPLAY="*) ;; *)
+            val=$(loginctl show-session "$sid" -p Display --value 2>/dev/null)
+            [ -n "$val" ] && envargs+=("DISPLAY=${val}") || continue ;;
+        esac
+        case " ${envargs[*]-} " in *" XDG_CURRENT_DESKTOP="*) ;; *)
+            pgrep -u "$uname" -x xfce4-session >/dev/null 2>&1 && envargs+=("XDG_CURRENT_DESKTOP=XFCE") ;;
+        esac
+        case " ${envargs[*]-} " in *" DBUS_SESSION_BUS_ADDRESS="*) ;; *)
+            envargs+=("DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${s_user}/bus") ;;
+        esac
+
+        if runuser -u "$uname" -- env "${envargs[@]}" "$helper" 2>/dev/null; then
+            log "  wallpaper applied in running session of '$uname' (session $sid)."
+        else
+            warn "  wallpaper helper failed for '$uname' (will apply at next login)."
+        fi
+    done < <(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}')
+    return 0
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -344,6 +436,54 @@ offer_vdi_install() {
 # schritt noetig wie bei der Live-ISO-Variante.)
 
 do_finish() {
+  
+# --- SUDO BOOTSTRAP BLOCK ---
+    # Fängt Aufrufe über "su root" ab, richtet sudo ein und startet das Skript via "sudo" neu.
+    if [ "$EUID" -eq 0 ] && [ -z "${SUDO_USER:-}" ]; then
+        local orig_user
+        orig_user=$(logname 2>/dev/null || true)
+        
+        if [ -n "$orig_user" ] && [ "$orig_user" != "root" ]; then
+            log "Aufruf über 'su' erkannt. Richte sudo für '$orig_user' ein..."
+            
+            # Sudo sicherstellen (auf minimalen Installationen oft nicht vorhanden)
+            command -v sudo >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq sudo; }
+            
+            # User in die Sudo-Gruppe aufnehmen
+            usermod -aG sudo "$orig_user" 2>/dev/null || true
+            
+            # Temporär NOPASSWD vergeben, damit der Neustart ohne TTY/Passwort-Prompt sofort durchläuft
+            echo "$orig_user ALL=(ALL:ALL) NOPASSWD: ALL" > "/etc/sudoers.d/thinforge-bootstrap"
+            chmod 0440 "/etc/sudoers.d/thinforge-bootstrap"
+            
+            log "Stelle Umgebungsvariablen für die grafische Oberfläche wieder her..."
+            local envpid
+            envpid=$(pgrep -u "$orig_user" -x xfce4-session 2>/dev/null | head -1)
+            [ -z "$envpid" ] && envpid=$(pgrep -u "$orig_user" -x xfdesktop 2>/dev/null | head -1)
+            [ -z "$envpid" ] && envpid=$(pgrep -u "$orig_user" systemd 2>/dev/null | head -1)
+            
+            if [ -n "$envpid" ] && [ -r "/proc/$envpid/environ" ]; then
+                export DISPLAY=$(tr '\0' '\n' < "/proc/$envpid/environ" 2>/dev/null | sed -n 's/^DISPLAY=//p' | head -1)
+                export XAUTHORITY=$(tr '\0' '\n' < "/proc/$envpid/environ" 2>/dev/null | sed -n 's/^XAUTHORITY=//p' | head -1)
+            fi
+            
+            # Fallbacks, falls der Grep fehlschlägt
+            [ -z "$DISPLAY" ] && export DISPLAY=":0"
+            [ -z "$XAUTHORITY" ] && export XAUTHORITY="/home/$orig_user/.Xauthority"
+            
+            log "Starte Skript als '$orig_user' über 'sudo' neu..."
+            
+            # Neustart via sudo (passiert dank NOPASSWD nun unsichtbar und ohne TTY-Error)
+            exec su -s /bin/bash "$orig_user" -c "sudo -E bash \"$0\" finish ${THINFORGE_SERVER:+--server=\"$THINFORGE_SERVER\"}"
+        fi
+    fi
+    
+    # Temporäre Bootstrap-Rechte sofort nach erfolgreichem Neustart wieder aufräumen!
+    # (Dieser Code wird erst erreicht, wenn das Skript erfolgreich über sudo neu gestartet wurde)
+    [ -f /etc/sudoers.d/thinforge-bootstrap ] && rm -f /etc/sudoers.d/thinforge-bootstrap
+    # --- ENDE SUDO BOOTSTRAP BLOCK ---
+  
+  
     local THINFORGE_SERVER="${1:-}"
 
     log "ThinForge configuration in the installed system..."
@@ -673,7 +813,7 @@ NTPCONF
         bash "$INSTALL_SCRIPT"
     else
         # Curl-Bootstrap-Modus wurde aus Sicherheitsgruenden entfernt
-        # (siehe docs/security-audit-2026-04-18.md F-CR-01). Tools-ISO ist
+        # (siehe docs/security/security-audit-2026-04-18.md F-CR-01). Tools-ISO ist
         # die einzige Provisioning-Quelle.
         fatal "Agent script (advanced/1-create-client-management.sh) not found.\nNeither next to this script nor on a volume with label 'THINFORGE_TOOLS'.\nMount the Tools-ISO (mount /dev/sr1 /mnt) and run the script again."
     fi
@@ -737,7 +877,15 @@ NTPCONF
     BRANDING_SCRIPT="$(find_tools_iso_script DistroTweaks/install-branding-debian-minimal.sh || true)"
     if [ -n "$BRANDING_SCRIPT" ] && [ -f "$BRANDING_SCRIPT" ]; then
         log "Applying ThinForge branding (wallpaper + boot splash)..."
-        bash "$BRANDING_SCRIPT" || warn "Branding failed — skipped."
+        if bash "$BRANDING_SCRIPT"; then
+            # Der vom Branding installierte Autostart-Helper setzt das
+            # Wallpaper erst beim NAECHSTEN Login. xfconf wirkt nur in der
+            # Session des angemeldeten Users (nicht als root) — daher den
+            # Helper jetzt einmal in allen laufenden Desktop-Sessions starten.
+            apply_wallpaper_to_active_sessions
+        else
+            warn "Branding failed — skipped."
+        fi
     else
         warn "Branding script not found — skipped."
     fi
@@ -802,3 +950,4 @@ case "$ACTION" in
         fatal "Unknown action: $ACTION\nUse 'finish'"
         ;;
 esac
+#

@@ -24,41 +24,44 @@ Der **Tasks**-Menüpunkt zeigt alle Hintergrundjobs, die der Server aktuell bear
 
 | Spalte | Bedeutung |
 |--------|-----------|
+| Client / Beschreibung | betroffener Client bzw. Beschreibung des Tasks |
 | Typ | Klasse des Tasks (capture, update, deploy, playbook, …) |
-| Status | `pending`, `running`, `completed`, `failed`, `cancelled` |
-| Ziel | Client, Clone oder System |
-| Gestartet | wann |
+| Status | `pending`, `running`, `completed`, `failed`, `cancelled` — bei laufenden Tasks mit eingebettetem Fortschrittsbalken |
+| Erstellt | wann der Task angelegt wurde |
 | Dauer | lauf- / gesamt-Zeit |
-| Fortschritt | % oder Stufen-Anzeige |
+| Fehler | Fehlertext bei fehlgeschlagenen Tasks |
 
 ### Filter
 
-- **Status-Chips** oben — nur laufende / nur fehlgeschlagene / nur abgeschlossene
-- **Text-Suche** — Ziel-Name, Task-ID
-- **Zeitraum** — heute / diese Woche / letzter Monat
+- **Status** — Dropdown über alle Status (`pending`, `running`, `completed`, `failed`, `cancelled`)
+- **Typ** — Dropdown zur Auswahl der Task-Art
+- **Text-Suche** — nach Client- bzw. Beschreibungsname
 
-### Detail
+### Aktionen
 
-Klick auf einen Task öffnet das Detail:
+Tasks werden direkt in der Tabelle verwaltet — eine eigene Detailansicht gibt es nicht. Jede Zeile bietet je nach Status passende Icon-Aktionen:
 
-- **Logs** — Live-Output des Tasks (bei `running`) oder kompletter Verlauf
-- **Parameter** — mit welchen Argumenten gestartet
-- **Event-Liste** — Meilensteine (gestartet, Zwischenschritt X erreicht, abgeschlossen)
-- **Aktionen** — Abbrechen (nur bei `running`), Neustarten (bei `failed`)
+- **Abbrechen** — bei laufenden oder wartenden Tasks
+- **Neustarten** — bei fehlgeschlagenen oder abgebrochenen Tasks
+- **Löschen** — bei abgeschlossenen Tasks
+
+Schlägt ein Task fehl, steht der Fehlertext direkt in der Spalte „Fehler" der jeweiligen Zeile.
 
 ### Typischer Nutzen im Alltag
 
 - Nach einem Rollout: „Wie viele Deploys sind bereits durch?"
-- Nach einem Fehler im Frontend-Snack: Task-ID aus der Meldung in Tasks suchen → volle Details
 - Wenn ein Client lange nichts meldet: ggf. hängt ein Task für ihn, der das blockiert
 
 ---
 
 ## Logs
 
-**Logs** zeigt Server-seitige Protokolle der ThinForge-Dienste. Es geht hier um Dinge, die Tasks (siehe oben) nicht abbilden — z. B. interne Fehler im Backend, dnsmasq-Meldungen, Caddy-Zugriffslogs.
+**Logs** bündelt zwei Ansichten in zwei Tabs:
 
-### Quellen
+- **Audit-Log** — wer hat wann was geändert. Eine paginierte Tabelle der schreibenden Zugriffe, filterbar nach Aktion und Pfad.
+- **Container-Logs** — die Protokolle der ThinForge-Dienste. Hier landen Dinge, die Tasks (siehe oben) nicht abbilden — z. B. interne Fehler im Backend, dnsmasq-Meldungen, Caddy-Zugriffslogs.
+
+### Container-Logs: Quellen
 
 Dropdown oben:
 
@@ -70,19 +73,9 @@ Dropdown oben:
 - **VPN / WireGuard** — VPN-Handshakes und Tunnel-Events
 - **Cloner / Cloning-VM** — nur wenn diese Container laufen
 
-### Filter
+### Container-Logs: Anzeige
 
-- **Level** — info, warn, error (oder alle)
-- **Zeitraum** — Standard: letzte 30 Minuten, anpassbar
-- **Textsuche** — in der Log-Message
-- **Livefollow** — Knopf rechts oben, streamt neue Zeilen live
-
-### Export
-
-- **Als Text** — reine Log-Zeilen
-- **Als CSV** — strukturiert mit Timestamp/Level/Message-Spalten
-
-Hilfreich bei Support-Tickets: den relevanten Zeitraum filtern, exportieren, als Anhang schicken.
+Angezeigt werden die letzten Zeilen des gewählten Dienstes. Über einen zweiten Selektor wählst du, wie viele Zeilen geladen werden (100, 200, 500 oder 1000 — Standard 200). Ein Knopf aktualisiert die Ausgabe manuell.
 
 ### Wann reicht das nicht?
 
