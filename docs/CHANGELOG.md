@@ -2,6 +2,8 @@
 
 ## 2026-07-18
 
+- **Ersteinrichtung ohne irreführende Warnung zum Playbook-Dienst** — Beim Abschluss der Ersteinrichtung erschien bisher die Warnung „Playbook-Dienst (Semaphore) konnte nicht eingerichtet werden", obwohl dieser Dienst gar nicht Teil der Installation ist (derzeit deaktiviert). Die Einrichtung erkennt das jetzt und überspringt den Schritt ohne Warnung; auch beim Ändern des Admin-Passworts wird kein entsprechender Fehler mehr protokolliert. Zusätzlich behoben: Bei jedem dieser vergeblichen Einrichtungsversuche blieb bisher eine temporäre Datei mit Zugangsdaten im Klartext im Datenverzeichnis (`semaphore/playbooks/`) liegen — sie wird nicht mehr geschrieben, und eine aus früheren Läufen vorhandene Datei wird beim nächsten Setup bzw. Admin-Passwort-Wechsel automatisch entfernt. Wirkt nach Aktualisierung der Server-Dienste (Backend).
+
 - **Client löschen widerruft jetzt auch den VPN-Zugang** — Wurde ein Client gelöscht, ohne sein VPN vorher zu deaktivieren, blieb der zugehörige VPN-Zugang des Geräts bestehen, war aber in der Verwaltung nicht mehr sichtbar. Das Löschen eines Clients entfernt jetzt automatisch auch dessen VPN-Zugang (wie die Schaltfläche *Deaktivieren*); ist die VPN-Verwaltung gerade nicht erreichbar, wird das Löschen dadurch nicht blockiert und der Vorgang protokolliert. Zusätzlich zeigt die Lizenzanzeige ohne gültige Lizenz keine irreführende Belegungszeile („N von 0 VPN-Clients") mehr. Wirkt nach Aktualisierung der Server-Dienste und der Verwaltungsoberfläche.
 
 ## 2026-07-17
