@@ -1,5 +1,9 @@
 # ThinForge Changelog
 
+## 2026-07-19
+
+- **Herunterfahren bleibt nicht mehr am Ausschalt-Bildschirm hängen (veralteter Agent)** — Thin Clients konnten beim Herunterfahren bis zu zehn Minuten auf dem Ausschalt-Bildschirm hängen bleiben, wenn ein älterer Agent (ohne den Befehl `apply-update`) mit einer neueren Dienst-Konfiguration kombiniert war: Der beim Herunterfahren vorgesehene Update-Aufruf startete dann versehentlich den Agent-Hintergrunddienst, auf dessen Ende das System vergeblich wartete. Der Agent bricht unbekannte Aufrufe jetzt sofort mit einer Fehlermeldung ab, statt in den Hintergrunddienst zu wechseln — das Herunterfahren läuft damit auch bei einem Versionsunterschied zwischen Agent und Dienst-Konfiguration ohne Verzögerung durch. Wirkt nach Aktualisierung des Agents (v2.16.1) auf den Clients.
+
 ## 2026-07-18
 
 - **Ersteinrichtung ohne irreführende Warnung zum Playbook-Dienst** — Beim Abschluss der Ersteinrichtung erschien bisher die Warnung „Playbook-Dienst (Semaphore) konnte nicht eingerichtet werden", obwohl dieser Dienst gar nicht Teil der Installation ist (derzeit deaktiviert). Die Einrichtung erkennt das jetzt und überspringt den Schritt ohne Warnung; auch beim Ändern des Admin-Passworts wird kein entsprechender Fehler mehr protokolliert. Zusätzlich behoben: Bei jedem dieser vergeblichen Einrichtungsversuche blieb bisher eine temporäre Datei mit Zugangsdaten im Klartext im Datenverzeichnis (`semaphore/playbooks/`) liegen — sie wird nicht mehr geschrieben, und eine aus früheren Läufen vorhandene Datei wird beim nächsten Setup bzw. Admin-Passwort-Wechsel automatisch entfernt. Wirkt nach Aktualisierung der Server-Dienste (Backend).
