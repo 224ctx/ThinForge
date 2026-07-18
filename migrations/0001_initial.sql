@@ -283,11 +283,6 @@ CREATE TABLE clients (
     pending_rollback         BOOLEAN      NOT NULL DEFAULT false,
     rollback_requested_at    TIMESTAMPTZ,
     boot_mode                VARCHAR(20),
-    -- Per-Client License-Tier-Slot. Tracks welche Clients der License-
-    -- Assignment-Module einen Full-Slot gegeben hat — fuer FIFO-Persistenz
-    -- ueber Backend-Restarts. (war ehemals migration 0003, ab v4.0-
-    -- Migrate-Konsolidierung hier inline.)
-    license_tier             TEXT         NOT NULL DEFAULT 'light',
     -- Per-Client-Heartbeat-Token (Token↔MAC-Bindung, M4 / F-HI-05 / F-CR-07).
     -- NULL = noch nicht enrollt → Client nutzt weiter den shared Token.
     heartbeat_token_hash     TEXT,
@@ -316,12 +311,6 @@ CREATE UNIQUE INDEX ix_clients_heartbeat_token_hash ON clients (heartbeat_token_
 CREATE INDEX idx_client_mac ON clients (mac_address);
 CREATE INDEX idx_client_last_seen ON clients (last_seen);
 CREATE INDEX idx_client_gruppe ON clients (gruppe_id);
--- Partial index fuer schnellen Lookup der Full-Tier-Clients (most clients
--- sind Light in typischen license-limited deployments). War 0003.
-CREATE INDEX clients_license_tier_full_idx
-    ON clients(license_tier)
-    WHERE license_tier = 'full';
-
 -- ── 11. ssh_command_logs ────────────────────────────────────────────────────
 
 CREATE TABLE ssh_command_logs (
@@ -877,3 +866,22 @@ CREATE TABLE managed_certificates (
 );
 
 CREATE INDEX ix_managed_certificates_gruppe_id ON managed_certificates (gruppe_id);
+
+-- ── 34. fleet_daily ─────────────────────────────────────────────────────────
+--
+-- Tages-Snapshot der Flotten-Verfügbarkeit (Phase-3-Reporting). Eine Zeile pro
+-- Tag, befüllt vom scheduled_task 'fleet_daily_snapshot' (UPSERT auf snapshot_date).
+CREATE TABLE fleet_daily (
+    id               UUID             NOT NULL DEFAULT gen_random_uuid(),
+    snapshot_date    DATE             NOT NULL,
+    total_clients    INTEGER          NOT NULL DEFAULT 0,
+    online_clients   INTEGER          NOT NULL DEFAULT 0,
+    offline_clients  INTEGER          NOT NULL DEFAULT 0,
+    error_clients    INTEGER          NOT NULL DEFAULT 0,
+    avg_cpu_percent  DOUBLE PRECISION,
+    avg_ram_percent  DOUBLE PRECISION,
+    avg_disk_percent DOUBLE PRECISION,
+    created_at       TIMESTAMPTZ      NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    UNIQUE (snapshot_date)
+);

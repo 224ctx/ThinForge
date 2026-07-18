@@ -194,6 +194,9 @@ services:
       - ${STORAGE_DIR:-./ThinForgeDaten}/tftp:/var/lib/tftpboot
       - ${STORAGE_DIR:-./ThinForgeDaten}/nfs-config:/data/nfs-config
       - ./agent-go/bin:/app/agent-go/bin:ro
+      # Lizenzmodell v2: der Worker prueft beim VPN-Aktivieren die Lizenz
+      # selbst (activate_remote_peer laeuft im Worker) — read-only Mount.
+      - ./license:/app/license:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/docker-compose.yml:ro
     healthcheck:
