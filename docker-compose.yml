@@ -80,7 +80,7 @@ services:
       com.thinforge.icon: "mdi-api"
       com.thinforge.critical: "true"
     <<: *no-search-domain
-    image: git.thinforge.org/thinforge/thinforge-backend:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-backend:v2026.07.19-2
     command: ["thinforge-api"]
     # Bind to 127.0.0.1 only — Caddy:80 reverse-proxiet /api/* fuer
     # PXE-Clients (HTTP, kein TLS-Trust). See F-CR-06.
@@ -171,7 +171,7 @@ services:
       com.thinforge.label: "Worker"
       com.thinforge.icon: "mdi-cog-outline"
     <<: *no-search-domain
-    image: git.thinforge.org/thinforge/thinforge-worker:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-worker:v2026.07.19-2
     command: ["thinforge-worker"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -222,7 +222,7 @@ services:
       com.thinforge.label: "Frontend (Vue)"
       com.thinforge.icon: "mdi-web"
     <<: *no-search-domain
-    image: git.thinforge.org/thinforge/thinforge-frontend:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-frontend:v2026.07.19-2
     restart: unless-stopped
     volumes:
       - ./docs/CHANGELOG.md:/docs/CHANGELOG.md:ro
@@ -309,7 +309,7 @@ services:
     labels:
       com.thinforge.label: "dnsmasq (DHCP/PXE)"
       com.thinforge.icon: "mdi-lan"
-    image: git.thinforge.org/thinforge/thinforge-dnsmasq:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-dnsmasq:v2026.07.19-2
     restart: unless-stopped
     profiles:
       - network
@@ -365,7 +365,7 @@ services:
     labels:
       com.thinforge.label: "Chrony (NTP)"
       com.thinforge.icon: "mdi-clock-outline"
-    image: git.thinforge.org/thinforge/thinforge-chrony:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-chrony:v2026.07.19-2
     restart: unless-stopped
     profiles:
       - network
@@ -387,7 +387,7 @@ services:
     labels:
       com.thinforge.label: "NFS Server"
       com.thinforge.icon: "mdi-folder-network"
-    image: git.thinforge.org/thinforge/thinforge-nfs-server:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-nfs-server:v2026.07.19-2
     restart: unless-stopped
     profiles:
       - network
@@ -500,7 +500,7 @@ services:
       com.thinforge.label: "Multicast-Sender"
       com.thinforge.icon: "mdi-multicast"
       com.thinforge.on_demand: "true"
-    image: git.thinforge.org/thinforge/thinforge-multicast-sender:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-multicast-sender:v2026.07.19-2
     profiles:
       - multicast
     network_mode: host
@@ -516,7 +516,7 @@ services:
       com.thinforge.icon: "mdi-progress-download"
       com.thinforge.on_demand: "true"
       com.thinforge.container_name: "thinforge-bt-seeder-service"
-    image: git.thinforge.org/thinforge/thinforge-bt-seeder:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-bt-seeder:v2026.07.19-2
     profiles:
       - bittorrent
     network_mode: host
@@ -526,7 +526,7 @@ services:
       com.thinforge.label: "Cloner (Clonezilla)"
       com.thinforge.icon: "mdi-content-duplicate"
       com.thinforge.on_demand: "true"
-    image: git.thinforge.org/thinforge/thinforge-cloner:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-cloner:v2026.07.19-2
     profiles:
       - cloner
     privileged: true
@@ -540,7 +540,7 @@ services:
       com.thinforge.label: "Cloning-VM (QEMU)"
       com.thinforge.icon: "mdi-desktop-classic"
       com.thinforge.on_demand: "true"
-    image: git.thinforge.org/thinforge/thinforge-cloning-vm:v2026.07.19
+    image: git.thinforge.org/thinforge/thinforge-cloning-vm:v2026.07.19-2
     restart: "no"
     profiles:
       - testing
