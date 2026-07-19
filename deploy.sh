@@ -80,8 +80,11 @@ echo "[1/4] Pulling images from git.thinforge.org/thinforge/*..."
 #  host_network_service.rs -> 'thinforge-backend'). Auf Release-Hosts existieren
 # die Short-Names nicht, nur die Registry-qualifizierten Tags. Alias-Tag setzen,
 # damit 'docker run thinforge-cloner' ohne Registry-Query landet.
-for img in backend worker frontend bt-seeder cloner cloning-vm chrony dnsmasq multicast-sender nfs-server netbird; do
-  docker tag "git.thinforge.org/thinforge/thinforge-${img}:latest" "thinforge-${img}:latest" 2>/dev/null || true
+for img in backend worker frontend bt-seeder cloner cloning-vm chrony dnsmasq multicast-sender nfs-server; do
+  ref="$(grep -oE "^[[:space:]]*image: git\.thinforge\.org/thinforge/thinforge-${img}:[A-Za-z0-9._-]+" "$COMPOSE_FILE" \
+        | head -1 | awk '{print $2}')"
+  [ -n "$ref" ] || continue
+  docker tag "$ref" "thinforge-${img}:latest" 2>/dev/null || true
 done
 
 if [ "$PULL_ONLY" = "1" ]; then
