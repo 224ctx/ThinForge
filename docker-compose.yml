@@ -233,7 +233,9 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:3000 || exit 1"]
+      # exec-Form + statische Go-Probe: das Minimus-Caddy-Image ist distroless
+      # (kein sh/wget) — die Probe ist im Frontend-Image enthalten (ab v2026.07.19-2).
+      test: ["CMD", "/healthprobe", "http://127.0.0.1:3000"]
       interval: 15s
       timeout: 5s
       retries: 3
