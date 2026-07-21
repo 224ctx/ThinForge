@@ -1,5 +1,9 @@
 # ThinForge Changelog
 
+## 2026-07-21
+
+- **Devices with automatic login no longer prompt for a password on wake** — On devices with automatic login, the screen still demanded a password after the screensaver or power-saving mode kicked in. First-run setup now disables the screen lock to match automatic login; the screensaver and power saving stay active, only the password prompt on wake is gone. *(Tools-ISO)*
+
 ## 2026-07-19
 
 - **Changelog in English and in a compact format** — The changelog (click on the version number) now appears in the language of the interface; a full English version of the entire history is available. At the same time, the entries in both languages have been condensed to a compact short form; the detailed earlier versions remain available in the project history. *(backend, management interface)*

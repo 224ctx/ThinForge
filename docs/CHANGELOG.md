@@ -1,5 +1,9 @@
 # ThinForge Changelog
 
+## 2026-07-21
+
+- **Geräte mit automatischer Anmeldung fragen beim Aufwachen kein Passwort mehr ab** — Auf Geräten mit automatischer Anmeldung verlangte der Bildschirm nach Bildschirmschoner oder Energiesparmodus bislang trotzdem ein Passwort. Die Ersteinrichtung schaltet die Bildschirmsperre jetzt passend zur automatischen Anmeldung ab; Bildschirmschoner und Energiesparen bleiben aktiv, nur die Passwortabfrage beim Aufwachen entfällt. *(Tools-ISO)*
+
 ## 2026-07-19
 
 - **Änderungsverlauf auf Englisch und in kompakter Form** — Der Änderungsverlauf (Klick auf die Versionsnummer) erscheint jetzt in der Sprache der Oberfläche; dafür gibt es eine englische Fassung des gesamten Verlaufs. Zugleich wurden die Einträge beider Sprachen auf eine kompakte Kurzform gestrafft; die ausführlichen früheren Fassungen bleiben in der Projekthistorie erhalten. *(Backend, Verwaltungsoberfläche)*

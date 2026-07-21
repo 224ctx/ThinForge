@@ -188,7 +188,7 @@ configure_sudo_users() {
     [ -z "$disp" ] && disp=":0"
     if [ -z "$xauth" ] || [ ! -s "$xauth" ]; then
         # -auth-File des Xorg, der genau $disp bedient (z.B. ".. :1 .. -auth FILE").
-        xauth=$(ps -o args= -C Xorg 2>/dev/null | grep -E "(^| )${disp}( |\$)" | sed -n 's/.*-auth \([^ ]*\).*/\1/p' | head -1)
+        xauth=$(ps -o args= -C Xorg 2>/dev/null | grep -E "(^| )${disp}( |\$)" | sed -n 's/.*-auth \([^ ]*\).*/\1/p' | head -1 || true)
     fi
     if { [ -z "$xauth" ] || [ ! -s "$xauth" ]; } && [ -n "$leader" ]; then
         xauth=$(tr '\0' '\n' < "/proc/$leader/environ" 2>/dev/null | sed -n 's/^XAUTHORITY=//p' | head -1)
@@ -322,6 +322,111 @@ autologin-user=${user}
 autologin-user-timeout=0
 AUTOLOGIN
     log "  Autologin configured for '${user}' (LightDM; effective next boot)."
+
+    # Autologin = Kiosk-Betrieb: zusaetzlich die Bildschirm-SPERRE abschalten,
+    # damit beim Aufwachen aus Bildschirmschoner/Energiesparmodus KEIN Passwort
+    # verlangt wird. Bildschirmschoner/Blank und Suspend bleiben erlaubt.
+    disable_screen_lock "$user"
+}
+
+# Schaltet die Bildschirm-SPERRE (Passwortabfrage bei Reaktivierung) ab, OHNE
+# den Bildschirmschoner oder das Energiesparen zu verbieten — der Schirm darf
+# weiter dunkel werden bzw. das Geraet suspendieren, das Aufwachen kommt aber
+# sofort ohne Passwort zurueck. Aufgerufen aus configure_autologin fuer den
+# Autologin-User. Drei Angriffspunkte auf einem Debian/XFCE/LightDM-Client:
+#   1. light-locker  — reiner Locker ohne "Blank-ohne-Passwort"-Modus, sperrt
+#      ueber den lightdm-Greeter → wird entfernt. xscreensaver nur mitentfernen,
+#      wenn xfce4-screensaver als Blank-Quelle bleibt (sonst verschwaende Blank).
+#   2. xfce4-screensaver — /lock/enabled=false: Saver blankt weiter, sperrt nie.
+#   3. xfce4-power-manager — lock-screen-suspend-hibernate=false: Resume ohne PW.
+# Anwendung system-weit ueber einen XDG-Autostart-Helper (aktuelle + kuenftige
+# User, gespiegelt zu tf_install_wallpaper_autostart in branding-common.sh) plus
+# Sofort-Apply in einer bereits laufenden Session.
+disable_screen_lock() {
+    local user="$1"
+
+    # 1. Reine Locker entfernen (best-effort, nicht-fatal). light-locker hat
+    #    keinen Modus "blanken ohne Passwort"; xscreensaver nur weg, wenn
+    #    xfce4-screensaver das Blanking uebernimmt.
+    local purge=()
+    dpkg -s light-locker >/dev/null 2>&1 && purge+=(light-locker)
+    if dpkg -s xscreensaver >/dev/null 2>&1 && dpkg -s xfce4-screensaver >/dev/null 2>&1; then
+        purge+=(xscreensaver)
+    fi
+    if [ ${#purge[@]} -gt 0 ]; then
+        if apt-get purge -y -qq "${purge[@]}" 2>/dev/null; then
+            log "  screen locker removed: ${purge[*]}"
+        else
+            warn "  could not remove screen locker(s): ${purge[*]}"
+        fi
+        # apt purge beendet keine LAUFENDE Instanz — sonst sperrt der noch
+        # aktive Locker die aktuelle Session bis zum Reboot. Prozessname ==
+        # Paketname bei light-locker/xscreensaver. Best-effort, nicht-fatal.
+        local pk
+        for pk in "${purge[@]}"; do pkill -x "$pk" 2>/dev/null || true; done
+    fi
+
+    # 2. Helper, der die Sperre in der User-Session abschaltet (Saver/Blank bleibt).
+    #    xfconf wirkt nur in der Session des Users — daher als Login-Autostart,
+    #    nicht hier als root.
+    local helper=/usr/local/bin/thinforge-disable-lock.sh
+    install -d -m0755 /usr/local/bin
+    cat > "$helper" <<'LOCKHELPER'
+#!/bin/sh
+# ThinForge — Bildschirm-SPERRE abschalten (Bildschirmschoner/Blank + Suspend
+# bleiben erlaubt, nur die Passwortabfrage bei Reaktivierung entfaellt).
+# Laeuft pro Benutzer beim Login (XDG-Autostart) und einmalig aus dem Installer.
+q() { xfconf-query "$@" 2>/dev/null; }
+# xfce4-screensaver: Saver darf blanken, aber niemals sperren.
+q -c xfce4-screensaver -p /lock/enabled -s false \
+  || q -c xfce4-screensaver -p /lock/enabled -n -t bool -s false
+q -c xfce4-screensaver -p /lock/saver-activation/enabled -s false \
+  || q -c xfce4-screensaver -p /lock/saver-activation/enabled -n -t bool -s false
+# xfce4-power-manager: bei Suspend/Hibernate nicht sperren (Suspend selbst bleibt).
+q -c xfce4-power-manager -p /xfce4-power-manager/lock-screen-suspend-hibernate -s false \
+  || q -c xfce4-power-manager -p /xfce4-power-manager/lock-screen-suspend-hibernate -n -t bool -s false
+exit 0
+LOCKHELPER
+    chmod 0755 "$helper"
+
+    # 3. Login-Autostart fuer aktuelle + kuenftige User (Muster wie
+    #    thinforge-wallpaper.desktop). Laeuft in der XFCE-Session, wo xfconf greift.
+    install -d -m0755 /etc/xdg/autostart
+    cat > /etc/xdg/autostart/thinforge-disable-lock.desktop <<AUTOSTART
+[Desktop Entry]
+Type=Application
+Name=ThinForge Disable Screen Lock
+Exec=${helper}
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+AUTOSTART
+    log "  screen lock disabled (autostart ${helper}; saver/blank + suspend kept)."
+
+    # 4. Sofort in einer laufenden Session des Autologin-Users anwenden, damit es
+    #    ohne Re-Login greift. Env-Ermittlung wie apply_wallpaper_to_active_sessions.
+    [ -n "$user" ] || return 0
+    command -v loginctl >/dev/null 2>&1 || return 0
+    local sid s_type envpid var val
+    while read -r sid; do
+        [ -n "$sid" ] || continue
+        [ "$(loginctl show-session "$sid" -p Name --value 2>/dev/null)" = "$user" ] || continue
+        s_type=$(loginctl show-session "$sid" -p Type --value 2>/dev/null)
+        case "$s_type" in x11|wayland) ;; *) continue ;; esac
+        # pgrep scheitert (Exit 1) wenn keine Session laeuft — || true, sonst
+        # braeche set -e (pipefail) hier do_finish ab.
+        envpid=$(pgrep -u "$user" -x xfce4-session 2>/dev/null | head -1 || true)
+        [ -n "$envpid" ] && [ -r "/proc/$envpid/environ" ] || continue
+        local envargs=()
+        for var in DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP; do
+            val=$(tr '\0' '\n' < "/proc/$envpid/environ" 2>/dev/null | sed -n "s/^${var}=//p" | head -1)
+            [ -n "$val" ] && envargs+=("${var}=${val}")
+        done
+        if runuser -u "$user" -- env "${envargs[@]}" "$helper" 2>/dev/null; then
+            log "  screen-lock settings applied in running session of '${user}'."
+        fi
+        break
+    done < <(loginctl list-sessions --no-legend 2>/dev/null | awk '{print $1}')
+    return 0
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -356,8 +461,8 @@ apply_wallpaper_to_active_sessions() {
 
         # Session-Umgebung besorgen: bevorzugt aus dem Session-Prozess der DE
         # (xfce4-session kennt DISPLAY/DBus sicher), sonst Session-Leader.
-        envpid=$(pgrep -u "$uname" -x xfce4-session 2>/dev/null | head -1)
-        [ -n "$envpid" ] || envpid=$(pgrep -u "$uname" -x xfdesktop 2>/dev/null | head -1)
+        envpid=$(pgrep -u "$uname" -x xfce4-session 2>/dev/null | head -1 || true)
+        [ -n "$envpid" ] || envpid=$(pgrep -u "$uname" -x xfdesktop 2>/dev/null | head -1 || true)
         if [ -z "$envpid" ]; then
             leader=$(loginctl show-session "$sid" -p Leader --value 2>/dev/null)
             [ -n "$leader" ] && envpid="$leader"
@@ -458,9 +563,9 @@ do_finish() {
             
             log "Stelle Umgebungsvariablen für die grafische Oberfläche wieder her..."
             local envpid
-            envpid=$(pgrep -u "$orig_user" -x xfce4-session 2>/dev/null | head -1)
-            [ -z "$envpid" ] && envpid=$(pgrep -u "$orig_user" -x xfdesktop 2>/dev/null | head -1)
-            [ -z "$envpid" ] && envpid=$(pgrep -u "$orig_user" systemd 2>/dev/null | head -1)
+            envpid=$(pgrep -u "$orig_user" -x xfce4-session 2>/dev/null | head -1 || true)
+            [ -z "$envpid" ] && envpid=$(pgrep -u "$orig_user" -x xfdesktop 2>/dev/null | head -1 || true)
+            [ -z "$envpid" ] && envpid=$(pgrep -u "$orig_user" systemd 2>/dev/null | head -1 || true)
             
             if [ -n "$envpid" ] && [ -r "/proc/$envpid/environ" ]; then
                 export DISPLAY=$(tr '\0' '\n' < "/proc/$envpid/environ" 2>/dev/null | sed -n 's/^DISPLAY=//p' | head -1)
