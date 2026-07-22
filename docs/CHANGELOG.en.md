@@ -1,5 +1,11 @@
 # ThinForge Changelog
 
+## 2026-07-22
+
+- **Cloning VM console: the mouse points and clicks where you see it** — In the Cloning VM's browser console the pointer was shown offset, so clicks did not land where the cursor appeared. The virtual machine now uses an absolute pointing device, so the visible cursor and the actual click point match exactly; the embedded console software (noVNC) was updated at the same time. *(Cloning VM)*
+
+- **Updated container base (security and maintenance update)** — The base images of all services were bumped to current versions (including Alpine 3.24, Rust 1.97, Go 1.26), pulling in current security and bug fixes of the underlying system components with no impact on usage. *(all services)*
+
 ## 2026-07-21
 
 - **Devices with automatic login no longer prompt for a password on wake** — On devices with automatic login, the screen still demanded a password after the screensaver or power-saving mode kicked in. First-run setup now disables the screen lock to match automatic login; the screensaver and power saving stay active, only the password prompt on wake is gone. *(Tools-ISO)*

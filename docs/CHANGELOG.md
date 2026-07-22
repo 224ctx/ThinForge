@@ -1,5 +1,11 @@
 # ThinForge Changelog
 
+## 2026-07-22
+
+- **Cloning-VM-Konsole: Maus zeigt und klickt lagerichtig** — In der Browser-Konsole der Cloning-VM wurde der Mauszeiger versetzt dargestellt, sodass Klicks nicht dort auslösten, wo der Zeiger zu sehen war. Die virtuelle Maschine erhält jetzt ein absolutes Zeigegerät, wodurch sichtbarer Zeiger und Klickpunkt exakt übereinstimmen; die eingebettete Konsolen-Software (noVNC) wurde zugleich aktualisiert. *(Cloning-VM)*
+
+- **Aktualisierte Container-Basis (Sicherheits- und Wartungsupdate)** — Die Basis-Images aller Dienste wurden auf aktuelle Stände gehoben (u. a. Alpine 3.24, Rust 1.97, Go 1.26) und bringen aktuelle Sicherheits- und Fehlerkorrekturen der zugrundeliegenden Systemkomponenten, ohne Auswirkung auf die Bedienung. *(alle Dienste)*
+
 ## 2026-07-21
 
 - **Geräte mit automatischer Anmeldung fragen beim Aufwachen kein Passwort mehr ab** — Auf Geräten mit automatischer Anmeldung verlangte der Bildschirm nach Bildschirmschoner oder Energiesparmodus bislang trotzdem ein Passwort. Die Ersteinrichtung schaltet die Bildschirmsperre jetzt passend zur automatischen Anmeldung ab; Bildschirmschoner und Energiesparen bleiben aktiv, nur die Passwortabfrage beim Aufwachen entfällt. *(Tools-ISO)*
