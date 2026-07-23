@@ -175,15 +175,14 @@ else
     note "TLS cert not in system CA store — other tools (curl, wget) will not trust it"
 fi
 
-# ── 4. Apply-Skripte ─────────────────────────────────────────────────
-hdr "Apply Scripts"
+# ── 4. Snapshot-Helfer ───────────────────────────────────────────────
+# apply-delta / apply-update sind seit dem Go-Agent keine Shell-Skripte
+# mehr, sondern stecken im Binary (thinforge-agent apply-delta /
+# apply-update); der Shutdown-Service (Abschnitt 5) ruft es direkt auf.
+# Hier bleibt nur der manuelle Snapshot-Helfer.
+hdr "Snapshot Helper"
 
-check_file /data/thinforge/agent-apply-delta.sh       "agent-apply-delta.sh"
-check_file /data/thinforge/agent-apply-update.sh      "agent-apply-update.sh"
 check_file /data/thinforge/manual-manage-snapshots.sh "manual-manage-snapshots.sh"
-
-[ -x /data/thinforge/agent-apply-delta.sh ]  || note "agent-apply-delta.sh not executable"
-[ -x /data/thinforge/agent-apply-update.sh ] || note "agent-apply-update.sh not executable"
 
 # ── 5. systemd-Units ─────────────────────────────────────────────────
 hdr "systemd Units"
