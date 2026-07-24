@@ -177,8 +177,7 @@ THINFORGE_TOOLS/
 │   ├── install-branding-debian-minimal.sh
 │   ├── install-branding-arch.sh
 │   ├── install-branding-cachyos.sh
-│   ├── install-branding-manjaro.sh
-│   └── install-remote-clients-debian.sh
+│   └── install-branding-manjaro.sh
 └── advanced/
     ├── 1-create-client-management.sh
     ├── agent-apply-delta.sh

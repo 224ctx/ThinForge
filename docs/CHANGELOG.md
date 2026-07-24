@@ -1,5 +1,9 @@
 # ThinForge Changelog
 
+## 2026-07-23
+
+- **VDI-Client-Installation vereinheitlicht** — Auf der Tools-ISO gab es zwei ähnlich benannte Skripte zum Installieren der VDI-/Remote-Desktop-Clients (Citrix, Parallels, Omnissa Horizon). Das ältere Skript berücksichtigte die über die Oberfläche hochgeladenen Client-Pakete nicht und wurde entfernt. Die Installation läuft jetzt eindeutig über das Skript im Ordner `DebianVDIClients` der Tools-ISO, das die hochgeladenen Pakete direkt verwendet. *(Tools-ISO)*
+
 ## 2026-07-22
 
 - **Cloning-VM-Konsole: Maus zeigt und klickt lagerichtig** — In der Browser-Konsole der Cloning-VM wurde der Mauszeiger versetzt dargestellt, sodass Klicks nicht dort auslösten, wo der Zeiger zu sehen war. Die virtuelle Maschine erhält jetzt ein absolutes Zeigegerät, wodurch sichtbarer Zeiger und Klickpunkt exakt übereinstimmen; die eingebettete Konsolen-Software (noVNC) wurde zugleich aktualisiert. *(Cloning-VM)*

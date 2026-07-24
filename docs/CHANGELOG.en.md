@@ -1,5 +1,9 @@
 # ThinForge Changelog
 
+## 2026-07-23
+
+- **VDI client installation unified** — The Tools ISO carried two similarly named scripts for installing the VDI / remote desktop clients (Citrix, Parallels, Omnissa Horizon). The older script did not take the client packages uploaded through the interface into account and has been removed. Installation now runs unambiguously through the script in the Tools ISO's `DebianVDIClients` folder, which uses the uploaded packages directly. *(Tools ISO)*
+
 ## 2026-07-22
 
 - **Cloning VM console: the mouse points and clicks where you see it** — In the Cloning VM's browser console the pointer was shown offset, so clicks did not land where the cursor appeared. The virtual machine now uses an absolute pointing device, so the visible cursor and the actual click point match exactly; the embedded console software (noVNC) was updated at the same time. *(Cloning VM)*
