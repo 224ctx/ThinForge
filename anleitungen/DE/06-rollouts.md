@@ -73,6 +73,17 @@ Die Detailseite zeigt:
 
 ## Rollout-Aktionen
 
+### Pausieren und Fortsetzen
+
+**Pausieren** hält den Rollout an zwei Stellen an:
+
+- Es wird **keine weitere Stufe** gestartet. Der Button „Weiter zu Stufe X" ist im pausierten Zustand nicht verfügbar — erst **Fortsetzen** gibt ihn wieder frei.
+- Vorbereitete Clients, die **noch nicht angefangen haben**, werden zurückgestellt — auch Nachzügler aus einer früheren Stufe, die diese nie durchlaufen haben: PXE-Eintrag zurück auf lokalen Start, anstehender Neustart-Auftrag verworfen, Einzelstatus zurück auf `pending`. Ohne diesen Schritt würde ein Client, der beim Start der Stufe ausgeschaltet war, beim nächsten Einschalten trotzdem klonen — auch wenn die Stufe längst wegen Fehlern pausiert wurde.
+
+Clients, die **schon klonen**, laufen weiter. Ein laufendes Image mitten im Schreibvorgang abzubrechen würde die Platte in einem unklaren Zustand hinterlassen; ihr Ergebnis wird normal als `done` oder `failed` verbucht. Wer auch die stoppen will, nutzt **Abbrechen**.
+
+**Fortsetzen** bereitet alle zurückgestellten Clients erneut vor (inkl. Neustart-Auftrag) und gibt „Weiter zu Stufe X" wieder frei. Clients, die die Stufe bereits abgeschlossen haben, bleiben unberührt.
+
 ### Abbrechen
 
 Setzt den Rollout auf `cancelled`. Bereits fertig deployed Clients bleiben auf der neuen Version, laufende Installationen werden unterbrochen (Client gehen in Rescue-Modus → manueller Reboot empfohlen).

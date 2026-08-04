@@ -1,5 +1,25 @@
 # ThinForge Changelog
 
+## 2026-08-04
+
+- **VPN activation now survives a missing internet connection** — When the VPN was activated for a device that had no internet access at that moment, the setup failed once and was left behind. The device now checks whether the internet and the VPN management server are reachable at all before attempting to connect, otherwise stores the assignment persistently and keeps retrying every minute — across a restart as well, and without the server having to send the assignment again. As soon as the connection is up, the device reports success and a previously displayed fault message disappears. *(Agent, backend)*
+
+- **A VPN configuration stored on a device is now visible** — Until now there was no way to tell whether a device had never been designated for the VPN, or whether it had long since received the assignment and only the connection had not been established yet. The VPN overview now shows a dedicated status **"config on client"** — showing that the setup is present on the device and is being pursued there. *(Agent, management interface)*
+
+- **VPN activations were left pending without any feedback** — A triggered VPN activation was not carried out and permanently showed no status. The pending assignment also blocked any further activation attempt for the same device without this being apparent — another click had no effect. Activations are now scheduled properly, report their progress back, and are picked up again automatically after an interruption. *(Backend)*
+
+- **Name resolution across the VPN connection** — Devices connected exclusively through the VPN could no longer reach the server by name and therefore stopped reporting back. Name resolution is now reachable from within the VPN as well; in addition, a device's VPN address appears in the device list again. Devices on the local network are unaffected by the change. *(Backend)*
+
+- **Maintenance: unused program code removed** — Following a review of the entire source code, around 3,000 lines of unused program code were removed. Nothing changes in day-to-day use. *(all services)*
+
+## 2026-07-27
+
+- **System backup switched to the current VPN** — On the VPN side the backup still carried leftovers of the previously self-hosted VPN setup (a tunnel file and a settings record no longer in use). It now contains only the actual VPN configuration: the connection to the VPN service and the stored access rules. Everything else — device assignments, connection status and history — the server fetches back from the VPN service after a restore. Consumed one-time keys are removed during the restore; a device join still in progress at backup time is preserved. *(Backend)*
+
+- **Removed the ineffective scheduled task "Synchronise VPN clients"** — The task predates the switch to NetBird and had been running into the void ever since: it reported success on every run without synchronising anything. It therefore disappears from the scheduled-task list; the VPN reconciliation keeps running in the background as before. *(Backend)*
+
+- **Pausing a rollout now actually pauses it** — The pause button of a staged rollout only set a status so far: the next stage could still be started, and devices that were powered off when the stage began went on to clone at their next power-on. Pause now stops both — no further stage is released, and devices that are prepared but have not started yet are put on hold (network boot back to local boot, pending restart discarded); resuming prepares them again. Devices that are already cloning deliberately keep going so that no image is aborted mid-write — use cancel for those. *(Backend, management interface)*
+
 ## 2026-07-23
 
 - **VDI client installation unified** — The Tools ISO carried two similarly named scripts for installing the VDI / remote desktop clients (Citrix, Parallels, Omnissa Horizon). The older script did not take the client packages uploaded through the interface into account and has been removed. Installation now runs unambiguously through the script in the Tools ISO's `DebianVDIClients` folder, which uses the uploaded packages directly. *(Tools ISO)*

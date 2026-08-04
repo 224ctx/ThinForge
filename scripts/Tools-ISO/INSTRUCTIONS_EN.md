@@ -150,7 +150,6 @@ THINFORGE_TOOLS/
 ├── INSTRUCTIONS_EN.md
 └── advanced/
     ├── 1-create-client-management.sh
-    ├── agent-apply-delta.sh
     ├── create-data-partition.sh
     ├── agent-home-mount-generator
     ├── thinforge-agent.py

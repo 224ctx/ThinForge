@@ -12,4 +12,3 @@ info() { echo -e "${_CYAN}[INFO]${_NC}  $*"; }
 ok()   { echo -e "${_GREEN}[OK]${_NC}    $*"; }
 warn() { echo -e "${_YELLOW}[WARN]${_NC}  $*"; }
 err()  { echo -e "${_RED}[ERROR]${_NC} $*" >&2; }
-die()  { err "$@"; exit 1; }

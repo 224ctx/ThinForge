@@ -1,5 +1,25 @@
 # ThinForge Changelog
 
+## 2026-08-04
+
+- **VPN-Aktivierung übersteht einen fehlenden Internetzugang** — Wurde das VPN für ein Gerät aktiviert, das gerade nicht ins Internet kam, schlug die Einrichtung einmalig fehl und blieb liegen. Das Gerät prüft jetzt vor dem Verbindungsaufbau, ob Internet und der VPN-Verwaltungsserver überhaupt erreichbar sind, legt den Auftrag andernfalls dauerhaft ab und versucht es im Minutentakt weiter — auch über einen Neustart hinweg und ohne dass der Server den Auftrag erneut senden muss. Sobald die Verbindung steht, meldet das Gerät den Erfolg, und eine zuvor angezeigte Störungsmeldung verschwindet. *(Agent, Backend)*
+
+- **Hinterlegte VPN-Konfiguration am Gerät ist jetzt erkennbar** — Bisher war nicht zu unterscheiden, ob ein Gerät nie für das VPN vorgesehen war oder ob es den Auftrag längst erhalten hat und nur die Verbindung noch nicht zustande kam. Die VPN-Übersicht zeigt dafür jetzt einen eigenen Status **„Konfig am Client"** — daran ist erkennbar, dass die Einrichtung am Gerät vorliegt und dort weiterverfolgt wird. *(Agent, Verwaltungsoberfläche)*
+
+- **VPN-Aktivierungen blieben ohne Rückmeldung liegen** — Eine ausgelöste VPN-Aktivierung wurde nicht ausgeführt und zeigte dauerhaft keinen Status. Der liegengebliebene Auftrag blockierte zudem jeden weiteren Aktivierungsversuch für dasselbe Gerät, ohne dass dies erkennbar war — ein erneuter Klick blieb wirkungslos. Aktivierungen werden jetzt regulär eingeplant, melden ihren Fortschritt zurück und werden nach einer Unterbrechung selbsttätig nachgeholt. *(Backend)*
+
+- **Namensauflösung über die VPN-Verbindung** — Geräte, die ausschliesslich über das VPN angebunden sind, konnten den Server nicht mehr über seinen Namen erreichen und meldeten sich deshalb nicht mehr zurück. Die Namensauflösung ist jetzt auch aus dem VPN heraus erreichbar; zusätzlich erscheint die VPN-Adresse eines Geräts wieder in der Geräteliste. Geräte im örtlichen Netz sind von der Änderung nicht betroffen. *(Backend)*
+
+- **Wartung: nicht mehr verwendeter Programmcode entfernt** — Nach einer Prüfung des gesamten Quellcodes wurden rund 3.000 Zeilen ungenutzter Programmcode entfernt. An der Bedienung ändert sich nichts. *(alle Dienste)*
+
+## 2026-07-27
+
+- **Systemsicherung auf das aktuelle VPN umgestellt** — Die Sicherung enthielt VPN-seitig noch Reste des frueheren, selbst betriebenen VPN-Aufbaus (eine Tunnel-Datei und einen nicht mehr verwendeten Einstellungssatz). Gesichert wird jetzt ausschliesslich die eigentliche VPN-Konfiguration, also die Anbindung an den VPN-Dienst und die hinterlegten Zugriffsregeln. Alles Weitere — Geraete-Zuordnungen, Verbindungsstatus und Verlauf — holt der Server nach einer Wiederherstellung selbst wieder vom VPN-Dienst. Verbrauchte Einmal-Schluessel werden bei der Wiederherstellung entfernt; ein zum Sicherungszeitpunkt noch laufender Geraete-Beitritt bleibt erhalten. *(Backend)*
+
+- **Wirkungslose geplante Aufgabe „VPN-Clients synchronisieren" entfernt** — Die Aufgabe stammte aus der Zeit vor der Umstellung auf NetBird und lief seither ins Leere: Sie meldete bei jedem Durchlauf Erfolg, ohne etwas zu synchronisieren. Sie verschwindet damit aus der Liste der geplanten Aufgaben; der VPN-Abgleich laeuft unveraendert im Hintergrund weiter. *(Backend)*
+
+- **Rollout pausieren hält jetzt wirklich an** — Die Pause-Schaltfläche eines gestaffelten Rollouts setzte bisher nur den Status: Die nächste Stufe liess sich trotzdem starten, und Geräte, die beim Start der Stufe ausgeschaltet waren, klonten beim nächsten Einschalten weiter. Pause stoppt nun beides — es wird keine weitere Stufe freigegeben, und bereits vorbereitete, aber noch nicht gestartete Geräte werden zurückgestellt (Netzwerkstart zurück auf lokalen Start, anstehender Neustart verworfen); Fortsetzen bereitet sie erneut vor. Geräte, die schon klonen, laufen bewusst weiter, damit kein Abbruch mitten im Schreibvorgang entsteht — dafür gibt es Abbrechen. *(Backend, Verwaltungsoberfläche)*
+
 ## 2026-07-23
 
 - **VDI-Client-Installation vereinheitlicht** — Auf der Tools-ISO gab es zwei ähnlich benannte Skripte zum Installieren der VDI-/Remote-Desktop-Clients (Citrix, Parallels, Omnissa Horizon). Das ältere Skript berücksichtigte die über die Oberfläche hochgeladenen Client-Pakete nicht und wurde entfernt. Die Installation läuft jetzt eindeutig über das Skript im Ordner `DebianVDIClients` der Tools-ISO, das die hochgeladenen Pakete direkt verwendet. *(Tools-ISO)*

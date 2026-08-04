@@ -308,7 +308,6 @@ CREATE TABLE clients (
 CREATE UNIQUE INDEX ix_clients_mac_address ON clients (mac_address);
 CREATE UNIQUE INDEX ix_clients_assigned_ip_unique ON clients (assigned_ip) WHERE assigned_ip IS NOT NULL;
 CREATE UNIQUE INDEX ix_clients_heartbeat_token_hash ON clients (heartbeat_token_hash) WHERE heartbeat_token_hash IS NOT NULL;
-CREATE INDEX idx_client_mac ON clients (mac_address);
 CREATE INDEX idx_client_last_seen ON clients (last_seen);
 CREATE INDEX idx_client_gruppe ON clients (gruppe_id);
 -- ── 11. ssh_command_logs ────────────────────────────────────────────────────
@@ -648,7 +647,6 @@ CREATE TABLE update_rollout_clients (
     client_id                UUID                       NOT NULL,
     status                   updaterolloutclientstatus  NOT NULL DEFAULT 'pending',
     download_state           TEXT                       NOT NULL DEFAULT 'idle',
-    download_started_at      TIMESTAMPTZ,
     download_lease_until     TIMESTAMPTZ,
     download_token_hash      VARCHAR(64),
     download_delta_file      VARCHAR(500),
@@ -746,8 +744,7 @@ CREATE INDEX idx_pending_deletions_client
 -- defekte v002 fuer Backend-Logik wie path_crosses_defective unsichtbar.
 
 CREATE TABLE defective_versions (
-    version    VARCHAR(50)   PRIMARY KEY,
-    marked_at  TIMESTAMPTZ   NOT NULL DEFAULT now()
+    version    VARCHAR(50)   PRIMARY KEY
 );
 
 -- ── 30. system_settings_vpn ─────────────────────────────────────────────────
@@ -780,14 +777,11 @@ CREATE TABLE vpn_audit_events (
     netbird_event_id    TEXT,
     event_type          TEXT NOT NULL,
     peer_id             TEXT,
-    related_client_id   UUID REFERENCES clients(id) ON DELETE SET NULL,
     payload             JSONB,
-    occurred_at         TIMESTAMPTZ NOT NULL,
-    captured_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+    occurred_at         TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX vpn_audit_events_time_idx ON vpn_audit_events (occurred_at DESC);
-CREATE INDEX vpn_audit_events_peer_idx ON vpn_audit_events (peer_id, occurred_at DESC);
 CREATE UNIQUE INDEX vpn_audit_events_netbird_id_uq
     ON vpn_audit_events (netbird_event_id)
     WHERE netbird_event_id IS NOT NULL;

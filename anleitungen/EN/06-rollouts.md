@@ -73,6 +73,17 @@ The detail page shows:
 
 ## Rollout actions
 
+### Pause and resume
+
+**Pause** stops the rollout in two places:
+
+- **No further stage** is started. The "Advance to stage X" button is unavailable while paused — only **Resume** brings it back.
+- Prepared clients that have **not started yet** are put on hold — including stragglers from an earlier stage that never went through it: PXE entry back to local boot, pending reboot job discarded, per-client status back to `pending`. Without this step a client that was powered off when the stage started would still clone on its next power-on — even though the stage was paused because of errors.
+
+Clients that are **already cloning** keep going. Aborting an image mid-write would leave the disk in an undefined state; their outcome is recorded normally as `done` or `failed`. To stop those as well, use **Cancel**.
+
+**Resume** prepares all held-back clients again (including the reboot job) and re-enables "Advance to stage X". Clients that already finished the stage are left untouched.
+
 ### Cancel
 
 Sets the rollout to `cancelled`. Already-deployed clients stay on the new version; running installations are interrupted (clients fall into rescue mode → manual reboot recommended).
