@@ -100,7 +100,6 @@ services:
       # Persist grype's vulnerability DB (~430 MB) across container restarts.
       # Without this, every UI-triggered scan re-downloads the DB (~8 min).
       GRYPE_DB_CACHE_DIR: /data/grype-cache
-      MANAGEMENT_DNS: ${MANAGEMENT_DNS:-}
       # CVE-Exposure-Filter: local = nur gebundelte Acceptance-Liste,
       # remote = vor Scan + Panel-Mount Remote-Version pruefen.
       THINFORGE_ACCEPTANCE_LIST_MODE: ${THINFORGE_ACCEPTANCE_LIST_MODE:-local}
@@ -554,7 +553,6 @@ services:
     environment:
       - VM_RAM=${CLONING_VM_RAM:-2048}
       - VM_CPUS=${CLONING_VM_CPUS:-2}
-      - DISK_SIZE=${CLONING_VM_DISK_SIZE:-60G}
       - ISO_PATH=${CLONING_VM_ISO_PATH:-}
       - KVM_ENABLED=${CLONING_VM_KVM_ENABLED:-true}
     depends_on:
