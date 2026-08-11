@@ -1,5 +1,33 @@
 # ThinForge Changelog
 
+## 2026-08-11
+
+- **Geräte behalten ihre VPN-Verbindung über eine Neuinstallation hinweg** — Wurde ein Gerät neu bespielt, verlor es dabei seine VPN-Einrichtung; der Server merkte davon nichts und schickte ihm nie wieder einen Einrichtungsauftrag. Das Gerät blieb dauerhaft ohne VPN, während die Übersicht weiterhin „wird installiert" anzeigte. Der Server löst die Zuordnung jetzt selbst auf und stellt einen neuen Zugangsschlüssel bereit — das Gerät meldet sich nach der Neuinstallation von allein wieder an. *(Backend, Verwaltungsoberfläche)*
+
+- **Warnung mit Liste der betroffenen Geräte vor einer Neuinstallation** — Vor dem Anlegen einer Neuinstallation erscheint jetzt eine Übersicht aller ausgewählten Geräte, die für das VPN eingerichtet sind, mit Hostname, Inventarnummer, Gruppe und Status. Die Liste lässt sich als CSV-Datei herunterladen, und erst eine Bestätigung legt den Auftrag an. Wer die Auswahl korrigieren will, kommt über „Abbrechen" in die unveränderte Auswahl zurück. *(Verwaltungsoberfläche, Backend)*
+
+- **Zugangsdaten werden erst gelöst, wenn ein Gerät wirklich bespielt wird** — Bisher wurden Anmelde- und VPN-Zuordnung schon beim Anlegen des Auftrags für alle ausgewählten Geräte aufgelöst. Traf die Auswahl versehentlich die falsche Gruppe oder wurde der Auftrag gleich wieder zurückgenommen, standen Geräte ohne gültige Zugangsdaten da, obwohl sie nie angefasst wurden. Beides passiert jetzt erst, wenn das einzelne Gerät tatsächlich mit dem Bespielen beginnt. *(Backend)*
+
+- **Ursache einer fehlgeschlagenen VPN-Einrichtung ist jetzt sichtbar** — Meldete ein Gerät, warum die VPN-Einrichtung nicht klappte, wurde dieser Grund zwar gespeichert, aber nie angezeigt. Er erscheint jetzt als Hinweis neben dem Status in der VPN-Übersicht. *(Backend, Verwaltungsoberfläche)*
+
+- **Sicherungen lassen sich wieder einspielen** — Das Einspielen einer Systemsicherung brach auf jedem eingerichteten Server mit einem Datenbankfehler ab; es gab damit keinen funktionierenden Weg, eine Konfiguration von einem anderen Server zu übernehmen. Die Ursache lag in der Art, wie einzelne Tabellen von der Sicherung ausgenommen wurden. Der Vorgang läuft jetzt durch, die Einstellungen des Zielservers bleiben dabei unangetastet. *(Backend)*
+
+- **Zählung der VPN-Plätze korrigiert** — Die Prüfung gegen die Lizenz und die tatsächliche Freigabe zählten unterschiedlich: verwaiste Einträge ohne zugehöriges Gerät wurden einmal mitgezählt und einmal nicht. Dadurch konnte eine Freigabe an einer Platzgrenze scheitern, die gar nicht erreicht war. Beide Stellen nutzen jetzt dieselbe Zählung, und Einträge ohne Gerät belegen keinen Platz mehr. *(Backend)*
+
+## 2026-08-06
+
+- **Verteilung hinterlegter Zertifikate erreicht jetzt alle Geräte** — Zertifikate, die über die Verwaltungsoberfläche hinterlegt werden, sollen von den Geräten selbsttätig übernommen werden. Der dafür nötige Abruf war für Geräte im Rollout-Netz und über das VPN nicht freigegeben und lief dort ins Leere; der Fehlschlag wurde zudem nur auf einer Diagnosestufe vermerkt und blieb dadurch unbemerkt. Der Abruf ist jetzt für beide Wege freigegeben. *(Backend)*
+
+- **Wiederkehrende Fehlermeldung beim Geräte-Start behoben** — Bei jedem Start versuchte ein Gerät, ein Einrichtungsskript für die Fernwartung nachzuladen, das der Server unter dieser Adresse nicht herausgab. Im Protokoll erschien dadurch wiederholt ein Fehler, obwohl nichts fehlte: Die Fernwartung wird bereits bei der Ersteinrichtung über das Werkzeug-Abbild vollständig installiert. Das überflüssige Nachladen entfällt nun, und die zugrundeliegende Lücke bei der Auslieferung von Signaturdateien ist geschlossen. *(Geräte-Programm, Backend)*
+
+- **Letzte veraltete Programmbausteine ersetzt** — Drei Bausteine, die aus Vorsichtsgründen zunächst ausgeklammert waren, sind nun ebenfalls aktuell: die Komprimierung der Sicherungen (die bisher über eine Programmbibliothek von 2016 lief), die Prüfung der Anmelde-Nachweise und eine Systembibliothek des Geräte-Programms. Bestehende Sicherungen bleiben lesbar und bestehende Anmeldungen gültig — beides ist durch Tests gegen eingefrorene Altbestände abgesichert. Damit ist im Server keine bekannte Schwachstelle mehr offen. *(Backend, Geräte-Programm)*
+
+- **Sicherheitsaktualisierung aller eingesetzten Programmbibliotheken** — Die Bausteine, auf denen Server und Verwaltungsoberfläche aufsetzen, wurden auf den aktuellen Stand gebracht. Damit sind rund 30 bekannte Schwachstellen geschlossen, darunter mehrere in der Zertifikatsprüfung und in der Aufbereitung von Texten in der Oberfläche. An der Bedienung ändert sich nichts. *(Backend, Verwaltungsoberfläche, alle Dienste)*
+
+- **Übersicht der bekannten Schwachstellen überarbeitet** — Die Liste der geprüften und bewusst in Kauf genommenen Schwachstellen war seit Mai nicht mehr nachgezogen worden. Sie wurde vollständig gegen einen frischen Prüflauf über alle Abbilder abgeglichen: 19 Einträge sind entfallen, weil die Schwachstellen nicht mehr vorhanden sind, 25 kamen hinzu, und alle Wiedervorlagetermine sind neu gesetzt. Zu jedem Eintrag steht jetzt nachvollziehbar, warum er hingenommen wird. *(Backend, Verwaltungsoberfläche)*
+
+- **Prüfbericht erfasst Schwachstellen aus dem Go-Umfeld korrekt** — Schwachstellen, die der Prüflauf unter einer Go-eigenen Kennung meldet, konnten bisher nicht als geprüft hinterlegt werden und erschienen bei jedem Durchlauf erneut als neu. Sie werden jetzt wie alle anderen berücksichtigt. *(Backend)*
+
 ## 2026-08-04
 
 - **VPN-Aktivierung übersteht einen fehlenden Internetzugang** — Wurde das VPN für ein Gerät aktiviert, das gerade nicht ins Internet kam, schlug die Einrichtung einmalig fehl und blieb liegen. Das Gerät prüft jetzt vor dem Verbindungsaufbau, ob Internet und der VPN-Verwaltungsserver überhaupt erreichbar sind, legt den Auftrag andernfalls dauerhaft ab und versucht es im Minutentakt weiter — auch über einen Neustart hinweg und ohne dass der Server den Auftrag erneut senden muss. Sobald die Verbindung steht, meldet das Gerät den Erfolg, und eine zuvor angezeigte Störungsmeldung verschwindet. *(Agent, Backend)*

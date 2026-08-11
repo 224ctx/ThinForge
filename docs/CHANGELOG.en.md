@@ -1,5 +1,33 @@
 # ThinForge Changelog
 
+## 2026-08-11
+
+- **Devices keep their VPN connection across a reinstall** — When a device was re-imaged it lost its VPN setup; the server never noticed and never sent it another setup instruction. The device stayed without VPN indefinitely while the overview kept showing "installing". The server now releases the pairing itself and provides a fresh access key — the device re-registers on its own after the reinstall. *(Backend, management interface)*
+
+- **Warning with a list of affected devices before a reinstall** — Before a reinstall is created, an overview now appears listing every selected device that is set up for VPN, with hostname, asset number, group and status. The list can be downloaded as a CSV file, and only a confirmation creates the job. Anyone wanting to adjust the selection returns to it unchanged via "Cancel". *(Management interface, backend)*
+
+- **Credentials are only released once a device is actually being imaged** — Until now, sign-in and VPN pairing were released as soon as the job was created, for every selected device. If the selection accidentally hit the wrong group, or the job was withdrawn straight away, devices were left without valid credentials even though they were never touched. Both now happen only once the individual device actually starts being imaged. *(Backend)*
+
+- **The reason a VPN setup failed is now visible** — When a device reported why its VPN setup did not work, that reason was stored but never shown. It now appears as a hint next to the status in the VPN overview. *(Backend, management interface)*
+
+- **Backups can be restored again** — Restoring a system backup aborted with a database error on every configured server, so there was no working way to carry a configuration over from another server. The cause lay in how individual tables were excluded from the backup. The process now completes, and the target server's own settings are left untouched. *(Backend)*
+
+- **VPN seat counting corrected** — The licence pre-check and the actual authorisation counted differently: orphaned entries without an associated device were included by one and not the other. An authorisation could therefore fail against a seat limit that had not in fact been reached. Both now use the same count, and entries without a device no longer occupy a seat. *(Backend)*
+
+## 2026-08-06
+
+- **Distribution of stored certificates now reaches every device** — Certificates stored through the management interface are meant to be adopted by the devices on their own. The fetch this relies on was not permitted for devices on the rollout network or over the VPN and ran into nothing there; the failure was only recorded at a diagnostic level and therefore went unnoticed. The fetch is now permitted on both paths. *(Backend)*
+
+- **Recurring error on device start resolved** — On every start, a device tried to fetch a setup script for remote assistance that the server did not hand out under that address. This produced a repeating error in the log even though nothing was missing: remote assistance is already installed in full during initial setup from the tools image. The redundant fetch is now gone, and the underlying gap in the delivery of signature files is closed. *(Device software, backend)*
+
+- **Last outdated building blocks replaced** — Three components that had deliberately been held back are now current as well: the compression used for backups (which still ran on a 2016-era library), the verification of login credentials, and a system library of the device software. Existing backups remain readable and existing sessions stay valid — both are covered by tests against frozen legacy artefacts. No known vulnerability remains open in the server. *(Backend, device software)*
+
+- **Security update of all bundled libraries** — The building blocks underneath the server and the management interface were brought up to date, closing around 30 known vulnerabilities, among them several in certificate validation and in the rendering of text in the interface. Nothing changes in day-to-day use. *(Backend, management interface, all services)*
+
+- **Known-vulnerability register reworked** — The register of reviewed and knowingly accepted vulnerabilities had not been maintained since May. It was reconciled in full against a fresh scan across every image: 19 entries were dropped because the vulnerabilities no longer exist, 25 were added, and every review date was reset. Each entry now states why it is accepted. *(Backend, management interface)*
+
+- **Scan report now handles Go-ecosystem vulnerabilities correctly** — Findings that the scanner reports under a Go-specific identifier could not be registered as reviewed and resurfaced as new on every run. They are now treated like all others. *(Backend)*
+
 ## 2026-08-04
 
 - **VPN activation now survives a missing internet connection** — When the VPN was activated for a device that had no internet access at that moment, the setup failed once and was left behind. The device now checks whether the internet and the VPN management server are reachable at all before attempting to connect, otherwise stores the assignment persistently and keeps retrying every minute — across a restart as well, and without the server having to send the assignment again. As soon as the connection is up, the device reports success and a previously displayed fault message disappears. *(Agent, backend)*
