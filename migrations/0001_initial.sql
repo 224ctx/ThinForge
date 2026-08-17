@@ -15,8 +15,13 @@
 --   2026-05-21 — 0002_thinvpn_netbird_migration + 0003_netbird_provisioning_ledger
 --                eingebacken: vpn_firewall_rules entfernt, vpn_clients auf das
 --                ThinVPN/NetBird-Schema umgestellt (WG-Felder raus, ThinVPN- +
---                ZTA-Spalten rein), system_settings_vpn, vpn_audit_events,
---                netbird_provisioning + vpn_settings-Default.
+--                ZTA-Spalten rein), system_settings_vpn + vpn_settings-Default.
+--   2026-08-15 — Cutover der NetBird-Neuanbindung: die Tabellen der abgeloesten
+--                Engine (vpn_audit_events, netbird_provisioning,
+--                vpn_host_access_modules/_rules) sind hier entfernt. Auf
+--                Bestands-DBs uebernimmt `apply_consolidated_backfills` die
+--                Host-Module als Freigaben und loescht die vier Tabellen
+--                anschliessend.
 --
 -- Schema-Änderungen NACH dem letzten Konsolidierungs-Stand gehen wieder in
 -- separate, numerierte Migrations (0002_*.sql, 0003_*.sql, …).
@@ -267,7 +272,11 @@ CREATE TABLE clients (
     hw_inventory_at          TIMESTAMPTZ,
     assigned_ip              VARCHAR(45),
     ip_address               VARCHAR(45),
-    agent_version            VARCHAR(20),
+    -- TEXT, nicht VARCHAR(20): ein `git describe`-Suffix („v2.16.1-123-gabcdef1")
+    -- trifft die Grenze auf den Zeichen genau, und der Heartbeat-UPDATE steht
+    -- auf `?` — ein Ueberlauf laesst den GANZEN Schlag mit 500 scheitern, das
+    -- Geraet gilt danach als offline.
+    agent_version            TEXT,
     vpn_connected            BOOLEAN      NOT NULL DEFAULT false,
     vpn_ip                   INET,
     connection_type          VARCHAR(20),
@@ -277,7 +286,10 @@ CREATE TABLE clients (
     installed_clone_id       VARCHAR(500),
     installed_image_at       TIMESTAMPTZ,
     boot_counter             INTEGER,
-    rollback_snap            VARCHAR(100),
+    -- TEXT, nicht VARCHAR(100): hier landet die komplette kommaseparierte
+    -- Snapshot-Liste des Agenten (`available_snapshots`), die mit der Zahl der
+    -- Snapshots waechst. Gleiche Folge wie oben — der ganze Heartbeat faellt.
+    rollback_snap            TEXT,
     update_confirmed         BOOLEAN,
     installed_version        VARCHAR(50),
     pending_rollback         BOOLEAN      NOT NULL DEFAULT false,
@@ -387,9 +399,17 @@ CREATE INDEX ix_client_tasks_template_id ON client_tasks (template_id);
 --
 -- ThinVPN/NetBird-Schema (war 0002): die alten WireGuard-Felder sind entfernt;
 -- stattdessen NetBird-Peer-/Setup-Key-Referenzen, Lifecycle-State und ZTA-Hooks.
--- vpn_state-Maschine: not_installed | installed_disabled | enrolled_inactive |
--- active | error. Spaltenreihenfolge entspricht dem physischen Post-ALTER-Stand
--- (id, client_id, created_at, dann die ehemals per ALTER ergänzten Spalten).
+-- vpn_state-Maschine: not_installed | installed_disabled | enroll_pending |
+-- enrolled_inactive | active | error. Spaltenreihenfolge entspricht dem
+-- physischen Post-ALTER-Stand (id, client_id, created_at, dann die ehemals per
+-- ALTER ergänzten Spalten).
+--
+-- `enroll_pending` kam mit Agent v2.16.9 (ff5b127) dazu und fehlte hier: der
+-- Agent sendet den Zustand seither in JEDEM Heartbeat, sobald eine VPN-Konfig
+-- vorgemerkt, aber noch nicht eingelöst ist. Der CHECK lehnte ihn ab, und weil
+-- der VPN-Bericht des Heartbeats EIN Statement ist, fiel damit der ganze
+-- Bericht weg — samt vpn_apply_status/-error, also genau der Information, die
+-- den Fehlschlag erklärt hätte. Das Feature war über den DB-Pfad nie wirksam.
 
 CREATE TABLE vpn_clients (
     id                      UUID         NOT NULL DEFAULT gen_random_uuid(),
@@ -401,12 +421,17 @@ CREATE TABLE vpn_clients (
     -- "aes-gcm:"-Prefix; deshalb TEXT statt BYTEA.
     setup_key_secret_enc    TEXT,
     vpn_state               TEXT         NOT NULL DEFAULT 'installed_disabled'
-        CHECK (vpn_state IN ('not_installed','installed_disabled','enrolled_inactive','active','error')),
+        CHECK (vpn_state IN ('not_installed','installed_disabled','enroll_pending','enrolled_inactive','active','error')),
     vpn_connection          TEXT,
     vpn_relay_id            TEXT,
     vpn_last_handshake      TIMESTAMPTZ,
     vpn_apply_status        TEXT,
     vpn_apply_error         TEXT,
+    -- Drossel fuer den Enroll-Push im Heartbeat: der Auftrag ging bisher in
+    -- JEDEM Tick raus (Default 10 s), und der Agent startet dabei den
+    -- NetBird-Daemon neu — das riss den frisch aufgebauten Tunnel wieder ab,
+    -- bis der Poller den Peer band. NULL = sofort faellig.
+    vpn_enroll_dispatched_at TIMESTAMPTZ,
     vpn_lan_mode            TEXT
         CHECK (vpn_lan_mode IS NULL OR vpn_lan_mode IN ('lan','remote','unknown')),
     -- TPM-Status aus dem Agent-Heartbeat (tpm_present/tpm_sealed im
@@ -414,8 +439,8 @@ CREATE TABLE vpn_clients (
     tpm_present             BOOLEAN,
     tpm_sealed              BOOLEAN,
     tpm_updated_at          TIMESTAMPTZ,
-    -- Cloud-Verbindungsstatus aus dem NetBird-Mgmt-Poll (vpn_polling),
-    -- alleinige Quelle für "verbunden" im VPN-Tab. NULL = nie bestätigt.
+    -- Cloud-Verbindungsstatus aus dem Reconcile-Tick (vpn::tick), alleinige
+    -- Quelle für "verbunden" im VPN-Tab. NULL = nie bestätigt.
     vpn_cloud_connected     BOOLEAN,
     vpn_cloud_seen_at       TIMESTAMPTZ,
     -- ZTA-Hooks (v1 nullable / unused; populated in v2)
@@ -428,7 +453,13 @@ CREATE TABLE vpn_clients (
     FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
 );
 
-CREATE INDEX vpn_clients_peer_id_idx   ON vpn_clients (vpn_peer_id);
+-- Ein NetBird-Peer gehoert zu genau EINEM Geraet. Ohne diese Zusicherung
+-- konnten zwei Zeilen dieselbe Peer-ID tragen (Hostname umbenannt und
+-- wiederverwendet) — ein „VPN deaktivieren" beim einen loeschte dann den Peer
+-- des anderen. Partiell, weil NULL der Normalfall ist: nicht aktivierte und
+-- geloeste Geraete tragen keine Bindung.
+CREATE UNIQUE INDEX vpn_clients_peer_id_idx ON vpn_clients (vpn_peer_id)
+    WHERE vpn_peer_id IS NOT NULL;
 CREATE INDEX vpn_clients_setup_key_idx ON vpn_clients (setup_key_id);
 
 -- ── 15. dhcp_leases ─────────────────────────────────────────────────────────
@@ -759,77 +790,77 @@ CREATE TABLE system_settings_vpn (
     last_modified_at            TIMESTAMPTZ,
     last_modified_by            UUID REFERENCES users(id),
     last_validated_at           TIMESTAMPTZ,
-    last_validation_outcome     TEXT
+    last_validation_outcome     TEXT,
+    -- Neuanbindung (2026-08): capabilities = gecachtes Ergebnis der
+    -- Verbindungsprobe (probe_capabilities); anchor_id = eigene Instanz-ID
+    -- (uuid v4, einmalig via ensure_anchor_id), als Marker in NetBird-Objekten
+    -- hinterlegt und beim Inspect als Eigentumsnachweis wiedererkannt;
+    -- bootstrap_state = Fortschritt des Setup-Wizards.
+    capabilities                JSONB,
+    anchor_id                   TEXT,
+    bootstrap_state             TEXT NOT NULL DEFAULT 'unconfigured'
+        CHECK (bootstrap_state IN ('unconfigured','inspect_pending','ready'))
 );
 
 INSERT INTO system_settings_vpn (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
--- ── 31. vpn_audit_events ────────────────────────────────────────────────────
+-- ── 31. Neuanbindung (2026-08) ──────────────────────────────────────────────
 --
--- NetBird-Audit-Events (in v1 befüllt, UI-Viewer in v2). War 0002.
+-- Das Schema der Reconcile-Engine neben der VPN-Baseline (vpn_clients,
+-- system_settings_vpn). Freigaben (vpn_exposures/-_rules) sind die
+-- Operator-Quelle des Soll-Zustands; vpn_objects ist das ID-Ledger;
+-- vpn_apply_log protokolliert jeden Apply-Lauf für Audit + GUI-Fehleranzeige.
 
-CREATE TABLE vpn_audit_events (
-    id                  BIGSERIAL PRIMARY KEY,
-    -- NetBird-Event-ID — Dedup-Anker für den Pull-Loop (ON CONFLICT DO
-    -- NOTHING), weil der MAX(occurred_at)-Watermark inklusiv ist und das
-    -- jüngste Event sonst bei jedem Tick erneut eingefügt würde. Nullable
-    -- nur wegen Bestandszeilen aus der Zeit vor dieser Spalte.
-    netbird_event_id    TEXT,
-    event_type          TEXT NOT NULL,
-    peer_id             TEXT,
-    payload             JSONB,
-    occurred_at         TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX vpn_audit_events_time_idx ON vpn_audit_events (occurred_at DESC);
-CREATE UNIQUE INDEX vpn_audit_events_netbird_id_uq
-    ON vpn_audit_events (netbird_event_id)
-    WHERE netbird_event_id IS NOT NULL;
-
--- ── 32. netbird_provisioning ────────────────────────────────────────────────
---
--- Provisioning-Ledger: protokolliert NetBird-Objekte, die der ThinForge-Server
--- automatisch anlegt (Server-Peer, Setup-Keys, Routen, Gruppen, DNS-Groups),
--- damit ein Teardown sie punktgenau wieder löschen kann. War 0003.
-
-CREATE TABLE netbird_provisioning (
+-- Freigaben (Operator-Regeln, Quelle des Soll-Zustands neben der Code-Baseline)
+CREATE TABLE vpn_exposures (
     id          BIGSERIAL PRIMARY KEY,
-    object_type TEXT NOT NULL CHECK (object_type IN
-                 ('peer','setup_key','route','group','nameserver_group',
-                  'network','resource','router','policy')),
-    netbird_id  TEXT NOT NULL,
-    label       TEXT,
+    name        TEXT NOT NULL,
+    address     TEXT NOT NULL,          -- IP oder CIDR im Client-Netz
+    dns_name    TEXT,                   -- optionaler dnsmasq-Hosteintrag
+    enabled     BOOLEAN NOT NULL DEFAULT true,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (object_type, netbird_id)
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX ux_vpn_exposures_name ON vpn_exposures (lower(name));
+
+CREATE TABLE vpn_exposure_rules (
+    id           BIGSERIAL PRIMARY KEY,
+    exposure_id  BIGINT NOT NULL REFERENCES vpn_exposures(id) ON DELETE CASCADE,
+    protocol     TEXT NOT NULL CHECK (protocol IN ('tcp','udp','icmp','all')),
+    ports        TEXT NOT NULL DEFAULT '',   -- Komma-Liste, leer = alle
+    source_group TEXT NOT NULL DEFAULT 'Clients',
+    description  TEXT NOT NULL DEFAULT ''
 );
 
--- Modulare Host-Zugriffs-Module (W22-style): ein Ziel-Host + Zugriffs-Regeln
--- (Protokoll/Ports) von einer Quell-Group. Operator-erstellt; der Reconcile
--- bildet jedes Modul auf 1 NetBird-Resource + 1 Policy je Regel ab.
-CREATE TABLE vpn_host_access_modules (
-    id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    name         TEXT         NOT NULL,
-    host_address TEXT         NOT NULL,
-    source_group TEXT         NOT NULL DEFAULT 'Clients',
-    enabled      BOOLEAN      NOT NULL DEFAULT true,
-    created_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    created_by   UUID
+-- ID-Ledger: Identität der ThinForge-eigenen NetBird-Objekte
+CREATE TABLE vpn_objects (
+    id                 BIGSERIAL PRIMARY KEY,
+    object_kind        TEXT NOT NULL CHECK (object_kind IN
+        ('group','network','resource','router','policy','nameserver_group')),
+    logical_name       TEXT NOT NULL,
+    netbird_id         TEXT NOT NULL,
+    config_fingerprint TEXT NOT NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (object_kind, logical_name)
 );
 
--- Modul-Name muss eindeutig sein (case-insensitive): zwei gleichnamige Module
--- erzeugen gleichnamige NetBird-Resources, die der Reconcile gegen dasselbe
--- Live-Objekt matcht → flappende UpdateResource-Aktionen (Audit vpn_desired.rs:245).
--- DB-Backstop zum Service-seitigen Duplikat-Check in vpn_host_modules::create.
-CREATE UNIQUE INDEX IF NOT EXISTS vpn_host_access_modules_name_uq
-    ON vpn_host_access_modules (lower(name));
-
-CREATE TABLE vpn_host_access_rules (
-    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    module_id   UUID         NOT NULL REFERENCES vpn_host_access_modules(id) ON DELETE CASCADE,
-    protocol    TEXT         NOT NULL CHECK (protocol IN ('tcp','udp','all')),
-    ports       TEXT         NOT NULL DEFAULT '',
-    description  TEXT         NOT NULL DEFAULT ''
+-- Apply-Historie (Audit + GUI-Fehleranzeige)
+CREATE TABLE vpn_apply_log (
+    id           BIGSERIAL PRIMARY KEY,
+    run_id       UUID NOT NULL,
+    started_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    action       TEXT NOT NULL,          -- create|adopt|update|recreate|delete|delete_foreign
+    object_kind  TEXT NOT NULL,
+    logical_name TEXT NOT NULL,          -- bei delete_foreign: Remote-Name
+    outcome      TEXT NOT NULL CHECK (outcome IN ('ok','failed','skipped')),
+    error_class  TEXT,
+    error_detail TEXT
 );
+CREATE INDEX ix_vpn_apply_log_run ON vpn_apply_log (run_id);
+-- Leseordnung der GUI (vpn::apply::recent_apply_log: ORDER BY started_at DESC,
+-- id DESC LIMIT n) und zugleich die Aufraeumregel des Reconcile-Ticks
+-- (DELETE ... started_at < now() - 14 Tage).
+CREATE INDEX ix_vpn_apply_log_started ON vpn_apply_log (started_at DESC, id DESC);
 
 -- ── 33. managed_certificates ────────────────────────────────────────────────
 --
