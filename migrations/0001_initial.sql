@@ -108,15 +108,6 @@ VALUES (
     'Bandwidth throttling config for delta-update rollouts (global).'
 ) ON CONFLICT (key) DO NOTHING;
 
--- ThinVPN-Settings: zta_mode = disabled|optional|enforced (v1: immer disabled). War 0002.
-INSERT INTO settings (key, value, category, description)
-VALUES (
-    'vpn_settings',
-    '{"zta_mode": "disabled"}'::jsonb,
-    'vpn',
-    'ThinVPN-Settings: zta_mode = disabled|optional|enforced (v1: immer disabled)'
-) ON CONFLICT (key) DO NOTHING;
-
 -- ── 3. audit_log ────────────────────────────────────────────────────────────
 
 CREATE TABLE audit_log (
@@ -397,6 +388,11 @@ CREATE INDEX ix_client_tasks_template_id ON client_tasks (template_id);
 
 -- ── 14. vpn_clients ─────────────────────────────────────────────────────────
 --
+-- Rueckbau 2026-08-20 (Legacy-Pruefung): `vpn_relay_id` (seit NetBird 0.71.x
+-- vom Agenten nie mehr befuellt, von niemandem gelesen) und `tpm_updated_at`
+-- (nur geschrieben, nie gelesen) sind entfallen; Bestands-DBs raeumen sie in
+-- `apply_consolidated_backfills` ab.
+--
 -- ThinVPN/NetBird-Schema (war 0002): die alten WireGuard-Felder sind entfernt;
 -- stattdessen NetBird-Peer-/Setup-Key-Referenzen, Lifecycle-State und ZTA-Hooks.
 -- vpn_state-Maschine: not_installed | installed_disabled | enroll_pending |
@@ -423,7 +419,6 @@ CREATE TABLE vpn_clients (
     vpn_state               TEXT         NOT NULL DEFAULT 'installed_disabled'
         CHECK (vpn_state IN ('not_installed','installed_disabled','enroll_pending','enrolled_inactive','active','error')),
     vpn_connection          TEXT,
-    vpn_relay_id            TEXT,
     vpn_last_handshake      TIMESTAMPTZ,
     vpn_apply_status        TEXT,
     vpn_apply_error         TEXT,
@@ -435,14 +430,29 @@ CREATE TABLE vpn_clients (
     vpn_lan_mode            TEXT
         CHECK (vpn_lan_mode IS NULL OR vpn_lan_mode IN ('lan','remote','unknown')),
     -- TPM-Status aus dem Agent-Heartbeat (tpm_present/tpm_sealed im
-    -- Full-Heartbeat); tpm_updated_at = Zeitpunkt der letzten Meldung.
+    -- Full-Heartbeat). Kein `tpm_updated_at` mehr: die Spalte wurde bei jeder
+    -- Meldung auf now() gesetzt und von keiner Zeile je gelesen (2026-08-20).
     tpm_present             BOOLEAN,
     tpm_sealed              BOOLEAN,
-    tpm_updated_at          TIMESTAMPTZ,
     -- Cloud-Verbindungsstatus aus dem Reconcile-Tick (vpn::tick), alleinige
     -- Quelle für "verbunden" im VPN-Tab. NULL = nie bestätigt.
     vpn_cloud_connected     BOOLEAN,
     vpn_cloud_seen_at       TIMESTAMPTZ,
+    -- Absichts-Marker: gesetzt NUR von den Pfaden, die den Zugang wirklich
+    -- entziehen — `vpn::enrollment::deactivate_client` (ein Geraet) und
+    -- `vpn::firstconnect::nach_loeschung_aufraeumen` (die Flotte, nach dem
+    -- Loeschen der Instanz-Objekte). Kein buchhalterischer Pfad setzt ihn.
+    -- Aus ihm speist sich das `vpn_desired`-Feld der Heartbeat-Antwort.
+    -- Bewusst eine eigene Spalte statt „keine Bindung mehr" — die Begruendung
+    -- steht bei `handlers::clients::vpn_soll`.
+    --
+    -- REGEL: jeder Pfad, der `vpn_peer_id` auf einen Wert setzt, MUSS diese
+    -- Spalte im selben Statement auf NULL ziehen (heute: `enrollment`,
+    -- `firstconnect`, `backup`, zwei Stellen in `vpn::tick`). Wer wieder einen
+    -- Peer haelt, hat wieder Zugang; ein stehen gebliebener Marker liesse den
+    -- Server dem Geraet dauerhaft „aus" sagen, waehrend die Liste es als
+    -- aktiviert fuehrt.
+    vpn_deactivated_at      TIMESTAMPTZ,
     -- ZTA-Hooks (v1 nullable / unused; populated in v2)
     user_id                 UUID         REFERENCES users(id),
     idp_subject             TEXT,
