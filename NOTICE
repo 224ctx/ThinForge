@@ -46,6 +46,25 @@ Third-party components:
         (downloaded on demand at the deployment site from upstream)
       * DRBL            — https://drbl.org/
         (referenced in source repository only; not shipped)
+      * NetBird         — https://netbird.io/
+        (upstream container image `netbirdio/netbird`, pulled at the
+        deployment site; neither repackaged nor modified)
+
+    ThinForge runs NetBird's client daemon (`netbird service run`) as a
+    separate program in its own container and addresses it only across
+    process boundaries — CLI invocation and the management instance's
+    HTTP API. It does not link against it. The client is licensed
+    BSD-3-Clause; NetBird's server variant — management, signal, relay
+    and dashboard — is AGPL-3.0-or-later and is not shipped by
+    ThinForge: it runs on a separately operated instance, which
+    ThinForge addresses only through its HTTP API. AGPLv3 §13
+    binds the operator of such an instance only if the operator
+    modifies NetBird. Where the ThinForge vendor operates it (hosted
+    ThinVPN service), it runs from the official upstream container
+    images, unmodified, and the source is named voluntarily in
+    WRITTEN_OFFER.md.
+
+        Copyright (c) 2022 NetBird GmbH & AUTHORS
 
   - The Rust, Go, and TypeScript components depend on open-source
     libraries under MIT, Apache-2.0, BSD, ISC, and similar licenses,

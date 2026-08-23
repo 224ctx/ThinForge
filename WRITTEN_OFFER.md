@@ -1,8 +1,8 @@
-# Written Offer for Source Code (GPL v2 §3(b) and GPL v3 §6(b))
+# Written Offer for Source Code (GPL v2 §3(b), GPL v3 §6(b) and AGPL v3 §13)
 
 **Valid for three (3) years from the date of distribution of the binary.**
 
-This written offer satisfies Section 3(b) of the GNU General Public License, Version 2, and Section 6(b) of the GNU General Public License, Version 3.
+This written offer satisfies Section 3(b) of the GNU General Public License, Version 2, and Section 6(b) of the GNU General Public License, Version 3. A voluntary source statement regarding Section 13 of the GNU Affero General Public License, Version 3 — covering the NetBird stack behind the hosted ThinVPN service — is at the end of this document.
 
 ## Offer
 
@@ -57,6 +57,24 @@ Source code is already distributed with every release of ThinForge:
 
 It is also available from the authoritative upstream projects listed in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md). You do not need to invoke this written offer if those channels meet your needs.
 
+## AGPLv3 §13 — Hosted ThinVPN Service (NetBird)
+
+The hosted ThinVPN service is built on **NetBird**. Its **server variant** — management, signal, relay and dashboard — is licensed **AGPL-3.0-or-later** and runs on an instance we operate; the NetBird **client**, which runs as a container inside each ThinForge stack, is BSD-3-Clause. ThinForge distributes neither (see [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)).
+
+**When §13 applies.** Section 13 of the AGPL v3 binds an operator only *if the operator modifies the Program*: "if you modify the Program, your modified version must prominently offer all users interacting with it remotely through a computer network … an opportunity to receive the Corresponding Source of your version". We operate NetBird from the **official upstream container images, unmodified**, and interact with it solely through its documented APIs — so no §13 obligation currently attaches. We name the source anyway — the statement below is voluntary, and it becomes binding the moment anything in the operated stack is patched.
+
+**Source.** The Corresponding Source of the operated instance is, in full:
+
+> https://github.com/netbirdio/netbird — server components, at the tag matching the running version, which we name on request
+>
+> https://github.com/netbirdio/dashboard — dashboard, likewise
+
+Should the operated stack ever be modified (patched server components, altered dashboard, custom relay build), §13 attaches: the modified Corresponding Source will then be published under AGPL-3.0-or-later, linked here, and made available from a network server at no charge.
+
+Requests may be sent to **info@thinforge.org**, subject line `AGPL Source Request — ThinVPN`.
+
+Unlike the GPL offer above, this statement carries no three-year limit: it stands for as long as we operate the instance.
+
 ---
 
-*This offer is made pursuant to Section 3(b) of the GNU General Public License, Version 2, and Section 6(b) of the GNU General Public License, Version 3. Copies of both license texts are provided in [`LICENSES/GPL-2.0.txt`](LICENSES/GPL-2.0.txt) and [`LICENSES/GPL-3.0.txt`](LICENSES/GPL-3.0.txt).*
+*This offer is made pursuant to Section 3(b) of the GNU General Public License, Version 2, and Section 6(b) of the GNU General Public License, Version 3; the AGPL v3 §13 statement above stands voluntarily for as long as the operated NetBird stack remains unmodified. Copies of the GPL texts are provided in [`LICENSES/GPL-2.0.txt`](LICENSES/GPL-2.0.txt) and [`LICENSES/GPL-3.0.txt`](LICENSES/GPL-3.0.txt); the AGPL v3 text is at https://www.gnu.org/licenses/agpl-3.0.html.*

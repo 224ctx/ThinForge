@@ -24,6 +24,26 @@ The following components are **orchestrated** by ThinForge but their binaries ar
 | **Clonezilla Live** | Downloaded on-demand by the customer from SourceForge via the ThinForge UI; ThinForge is a downloader, not a distributor. The ISO bundles its own source. ThinForge does not repackage or modify the downloaded ISO before serving its contents — it only extracts the already-GPL-compliant boot files into TFTP. | https://clonezilla.org/ | [`LICENSES/Clonezilla.md`](LICENSES/Clonezilla.md) |
 | **DRBL** | Not installed in any ThinForge image. Developer reference only. | https://drbl.org/ | [`LICENSES/DRBL.md`](LICENSES/DRBL.md) |
 
+## NetBird — the VPN Stack (BSD-3-Clause / AGPL-3.0-or-later)
+
+NetBird is licensed in two halves: the **client** is BSD-3-Clause, while the **`management/`, `signal/`, `relay/` and `combined/`** directories are **AGPL-3.0-or-later** (from NetBird v0.53.0, released 2025-08-05; every earlier release was BSD-3-Clause throughout).
+
+That split runs straight along ThinForge's deployment topology. Two NetBird instances are involved, and only the first is part of a ThinForge deployment:
+
+1. **The client**, as a container inside the ThinForge stack (`docker-compose.yml`, service `netbird`) — this is the ThinForge server's own peer. BSD-3-Clause.
+2. **The server variant** (management, signal, relay and dashboard), running on a separately operated instance that ThinForge only ever addresses through its documented HTTP API. AGPL-3.0-or-later.
+
+| Component | License | How ThinForge relates to it |
+|-----------|---------|-----------------------------|
+| NetBird client (`netbirdio/netbird` image; `netbird` CLI on thin clients) | BSD-3-Clause | **Not distributed by ThinForge.** The image is pulled from the upstream registry at the deployment site (`docker-compose.yml`, service `netbird`); on clients the agent is installed at install time by the official installer `https://pkgs.netbird.io/install.sh` (`scripts/Tools-ISO/install-*.sh`). Neither is repackaged nor modified. |
+| NetBird server variant — management, signal, relay and dashboard, whether as NetBird's separate official images or its all-in-one image | AGPL-3.0-or-later | **Not shipped by ThinForge.** No ThinForge image, compose file or installer contains a NetBird server component; ThinForge is a pure API client against a separately operated instance. |
+
+ThinForge does not link against any NetBird component: the Go agent invokes the `netbird` CLI as a subprocess (`agent-go/internal/netbird/`; `agent-go/go.mod` declares no NetBird module), and the backend speaks HTTP to the management API through a hand-written client (`crates/thinforge-services/src/netbird/`). No NetBird source is vendored. ThinForge's GPL-3.0-or-later code and NetBird therefore remain independent works.
+
+**AGPLv3 §13 — when it binds an operator.** Section 13 attaches only *if the operator modifies the Program*: a modified version must offer its network users the Corresponding Source of that version. Running unmodified upstream NetBird therefore triggers no §13 obligation at all, and §13 never binds ThinForge the software — only whoever operates an instance. Where the ThinForge vendor operates one itself — as it does for the hosted ThinVPN service — it runs from the official upstream container images, unmodified, and the source is named voluntarily in [`WRITTEN_OFFER.md`](WRITTEN_OFFER.md): https://github.com/netbirdio/netbird and https://github.com/netbirdio/dashboard. Any future modification of the operated stack (patched server components, altered dashboard, custom relay build) does trigger §13 and must be published under AGPL-3.0-or-later.
+
+Upstream copyright: `Copyright (c) 2022 NetBird GmbH & AUTHORS`.
+
 ## How ThinForge Interacts with GPL Components
 
 | Component | Interaction | Linking? | Address-space shared? |
@@ -105,7 +125,7 @@ Each distribution of ThinForge (source repository, Release repository, container
 - `NOTICE` — short notice of bundled FOSS.
 - `THIRD_PARTY_LICENSES.md` — this file.
 - `LICENSES/` — directory containing `GPL-2.0.txt`, `GPL-3.0.txt` and per-component metadata.
-- `WRITTEN_OFFER.md` — written offer for source code per GPL v2 §3(b).
+- `WRITTEN_OFFER.md` — written offer for source code per GPL v2 §3(b) / GPL v3 §6(b), plus the voluntary AGPLv3 §13 source statement for the operated NetBird stack.
 - `sources/` — corresponding source tarballs for every GPL binary ThinForge distributes (with pinned SHA-256).
 
 ## Contact
