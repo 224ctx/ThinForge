@@ -2,6 +2,8 @@
 
 ## 2026-08-23
 
+- **Der VPN-Bereich nennt jetzt Lizenz und Quelltext der eingesetzten VPN-Technik** — Unter dem VPN-Bereich stand bisher nur „powered by NetBird". Dort steht nun, unter welchen Lizenzen NetBird steht (Client BSD-3-Clause, Serverkomponenten AGPL-3.0-or-later), mit einem Link auf den Quelltext. *(Verwaltungsoberfläche)*
+
 - **„Übernehmen" im Einrichtungs-Assistenten ist wieder verfügbar** — Die Schaltfläche war vorübergehend gesperrt, weil der Server sich nach einer Übernahme nicht wieder bei der VPN-Instanz anmeldete. Das ist behoben und am laufenden System geprüft: Der Server nimmt seinen bisherigen Eintrag wieder auf, es entsteht kein zweiter, und die Geräte melden sich binnen Sekunden zurück. *(Verwaltungsoberfläche)*
 
 - **„Server anmelden" tat nichts, wenn der VPN-Dienst des Servers still lag** — Also genau dann, wenn man den Knopf braucht: nach einem Lösen der Verbindung oder nach einer Übernahme blieb der Server ohne Tunnel, und die Geräte im VPN verloren damit ihren Weg zum Server — ihr Lebenszeichen blieb aus. Ursache war eine Verwechslung im Backend: ein stillgelegter VPN-Dienst wurde behandelt wie einer, der sich gerade nicht befragen lässt, und in dem Fall unternimmt ThinForge bewusst nichts. Beides ist jetzt unterschieden. *(Backend)*

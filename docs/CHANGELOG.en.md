@@ -2,6 +2,8 @@
 
 ## 2026-08-23
 
+- **The VPN area now names the license and source of the VPN technology in use** — Below the VPN area it previously said only "powered by NetBird". It now states which licenses NetBird is under (client BSD-3-Clause, server components AGPL-3.0-or-later), with a link to the source. *(Management interface)*
+
 - **"Adopt" in the setup wizard is available again** — The button was temporarily locked because the server did not re-register with the VPN instance after an adoption. That is fixed and verified on the running system: the server takes its previous entry back, no second one appears, and the devices report back within seconds. *(Management interface)*
 
 - **"Register server" did nothing while the server's VPN service was shut down** — Which is exactly when the button is needed: after releasing the connection or after an adoption the server stayed without a tunnel, and the devices on the VPN thereby lost their route to the server — their heartbeat stopped. The cause was a mix-up in the backend: a shut-down VPN service was treated like one that cannot currently be queried, and in that case ThinForge deliberately does nothing. The two are now told apart. *(Backend)*
