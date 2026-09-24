@@ -4,13 +4,23 @@
 # crates/, agent-go/ etc. are intentionally absent in the Release repo.
 #
 # Usage:
-#   ./deploy.sh             # pull + up -d
-#   ./deploy.sh --pull-only # pull images, do not touch the stack
+#   ./deploy.sh              # pull + up -d
+#   ./deploy.sh --pull-only  # pull images, do not touch the stack
 
 set -euo pipefail
 
+# Gemeinsame Helfer wie in rebuild.sh: setzt PROJECT_ROOT und wechselt dorthin,
+# damit die relativen Pfade unten (.env, docker/caddy/Caddyfile, Compose-Datei)
+# auch stimmen, wenn deploy.sh aus einem anderen Verzeichnis gestartet wird.
+# load_storage_dir folgt bewusst erst NACH der .env-Vorpruefung: es wuerde ueber
+# ensure_env_file eine fehlende .env selbst erzeugen und damit den
+# ausdruecklichen Abbruch unten aushebeln — auf einem Release-Host soll der
+# Betreiber die .env sehen und bearbeiten, nicht zufaellige Werte geschenkt
+# bekommen.
+source "$(cd "$(dirname "$0")" && pwd)/scripts/lib-env.sh"
+init_project_root
+
 COMPOSE_FILE="docker-compose.yml"
-STORAGE_DIR="${STORAGE_DIR:-$(pwd)/ThinForgeDaten}"
 
 # Start profiles mirror the Dev-side default (rebuild.sh). Cloner/cloning-vm
 # are on-demand only (UI-triggered QEMU VMs), not started here.
@@ -22,7 +32,9 @@ for arg in "$@"; do
   case "$arg" in
     --pull-only) PULL_ONLY=1 ;;
     --help|-h)
-      grep '^#' "$0" | head -10
+      # Genau den Kopfkommentar zeigen — `grep '^#' | head` zog sonst je nach
+      # Dateiaufbau noch eine beliebige spaetere Kommentarzeile mit hinein.
+      sed -n '2,8p' "$0"
       exit 0 ;;
     *)
       echo "Unknown option: $arg"; exit 1 ;;
@@ -38,8 +50,21 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+# STORAGE_DIR aus derselben Quelle wie docker compose aufloesen (Shell-Umgebung
+# schlaegt .env, .env schlaegt ./ThinForgeDaten) und exportieren. Vorher las
+# deploy.sh nur die Shell-Umgebung: mit einem eigenen STORAGE_DIR in der .env
+# legte es Verzeichnisbaum, TLS-Zertifikat, Caddyfile und die exports-DATEI
+# unter ./ThinForgeDaten an, waehrend Compose ${STORAGE_DIR} aus der .env
+# mountete. Docker legt jede fehlende Bind-Quelle als VERZEICHNIS an — aus
+# nfs-config/exports wurde ein Verzeichnis, der nfs-server ging in den
+# Restart-Loop, und Caddy fand kein Zertifikat.
+load_storage_dir
+
 # ---------------------------------------------------------------------------
-# .env migrations — identisch zu rebuild.sh (F-HI-09 + Services-Panel-Filter)
+# .env migrations — identisch zu rebuild.sh (F-HI-09 + Services-Panel-Filter).
+# REDIS_PASSWORD kommt aus scripts/lib-env.sh::ensure_env_secrets (in
+# load_storage_dir oben) — vor dem ersten compose-Aufruf, sonst scheitert
+# schon `pull` an `${REDIS_PASSWORD:?}`.
 # Existierende .env-Dateien ohne SEMAPHORE_ADMIN_PASSWORD bekommen eine
 # frische Random-Passphrase; sonst bricht Semaphore beim Up.
 # ---------------------------------------------------------------------------
@@ -53,13 +78,10 @@ if ! grep -q '^SEMAPHORE_ADMIN_PASSWORD=' .env; then
   SEMAPHORE_PW_RESET_NEEDED=1
 fi
 
-ENABLED_PROFILES_LINE="THINFORGE_ENABLED_PROFILES=$(IFS=,; echo "${START_PROFILES[*]},testing,cloner,bittorrent,multicast")"
-if ! grep -q '^THINFORGE_ENABLED_PROFILES=' .env; then
-  printf '\n# Services-Panel-Filter (auto-verwaltet von deploy.sh)\n%s\n' \
-    "$ENABLED_PROFILES_LINE" >> .env
-elif ! grep -qxF "$ENABLED_PROFILES_LINE" .env; then
-  sed -i "s|^THINFORGE_ENABLED_PROFILES=.*|$ENABLED_PROFILES_LINE|" .env
-fi
+# Services-Panel-Filter: Standard nur nachziehen, wo die Zeile fehlt, leer
+# ist oder einen frueheren Standard traegt — ein eigener Wert bleibt stehen
+# (scripts/lib-env.sh::ensure_enabled_profiles, Review 2026-09-02, B1).
+ensure_enabled_profiles "$(IFS=,; echo "${START_PROFILES[*]},testing,cloner,bittorrent,multicast")" deploy.sh
 
 COMPOSE_CMD=(docker compose -f "$COMPOSE_FILE")
 PROFILE_FLAGS=();      for p in "${ALL_PROFILES[@]}";   do PROFILE_FLAGS+=("--profile" "$p");   done
@@ -164,9 +186,11 @@ if [ "$SEMAPHORE_PW_RESET_NEEDED" = "1" ] && docker ps --format '{{.Names}}' | g
        --login admin --password "$PASS" --config /etc/semaphore/config.json >/dev/null 2>&1; then
     echo "[migration] Semaphore-Admin-Passwort rotiert"
   else
-    echo "[migration] WARN: Semaphore-PW-Reset fehlgeschlagen, manuell nachholen:"
+    # Kein Klartext-Passwort in der Ausgabe (Terminal-Verlauf, Install-Logs,
+    # CI) — der vorgeschlagene Befehl liest den Wert selbst aus der .env.
+    echo "[migration] WARN: Semaphore-PW-Reset fehlgeschlagen, manuell nachholen (Passwort: SEMAPHORE_ADMIN_PASSWORD in .env):"
     echo "  docker exec thinforge-semaphore-1 semaphore users change-by-login \\"
-    echo "    --login admin --password '$PASS' --config /etc/semaphore/config.json"
+    echo "    --login admin --password \"\$(grep '^SEMAPHORE_ADMIN_PASSWORD=' .env | cut -d= -f2-)\" --config /etc/semaphore/config.json"
   fi
 fi
 

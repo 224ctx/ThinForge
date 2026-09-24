@@ -66,10 +66,25 @@ services:
     <<: *no-search-domain
     image: redis:8-alpine
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
+    # Authentifizierung ist Pflicht (Review 2026-09-02 S5-1): die
+    # network_mode:host-Dienste teilen sich das Host-Loopback; ohne Passwort
+    # schriebe jeder von ihnen Auftraege in die Liste, die der Worker als
+    # root auf den Thinclients ausfuehrt. `:?` laesst den Stack OHNE Passwort
+    # laut scheitern statt still ohne Auth zu starten. deploy.sh traegt die
+    # Variable auf bestehenden Installationen nach (scripts/lib-env.sh).
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD fehlt in .env — deploy.sh traegt sie nach}"]
+    environment:
+      # Fuer den Healthcheck: redis-cli liest das Passwort aus dieser
+      # Variablen (nicht `-a` auf der Kommandozeile).
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD fehlt in .env — deploy.sh traegt sie nach}
+    # Kein veroeffentlichter Port: Backend und Worker erreichen Redis ueber
+    # das Compose-Netz (`redis`). Der Dev-Stack behaelt 127.0.0.1:6379 fuer
+    # Tests; im Release-Betrieb braucht es den Host-Port nicht.
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # `-e` ist Pflicht: ohne es druckt `redis-cli ping` gegen einen
+      # requirepass-Server `NOAUTH` und beendet sich trotzdem mit 0 — der
+      # Container gaelte als gesund.
+      test: ["CMD", "redis-cli", "-e", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -93,10 +108,16 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD fehlt in .env — deploy.sh traegt sie nach}@redis:6379/0
       STORAGE_DIR: /data
       TFTP_ROOT: /var/lib/tftpboot
       SIGNING_KEY_DIR: /data/keys
+      # Services-Panel-Filter (compose::enabled_profiles_from_env) — Paritaet
+      # zum Dev-Compose. Fehlte bis 2026-09-23: auf Release-Hosts galt immer die
+      # Vorgabe, ein eigener Wert in .env blieb wirkungslos (Review 2026-09-02,
+      # B1). Leer = Vorgabe (network,monitoring,testing,cloner,bittorrent,
+      # multicast); deploy.sh zieht nur seinen Standard nach.
+      THINFORGE_ENABLED_PROFILES: ${THINFORGE_ENABLED_PROFILES:-}
       # Persist grype's vulnerability DB (~430 MB) across container restarts.
       # Without this, every UI-triggered scan re-downloads the DB (~8 min).
       GRYPE_DB_CACHE_DIR: /data/grype-cache
@@ -105,9 +126,15 @@ services:
       THINFORGE_ACCEPTANCE_LIST_MODE: ${THINFORGE_ACCEPTANCE_LIST_MODE:-local}
       THINFORGE_ACCEPTANCE_LIST_URL: ${THINFORGE_ACCEPTANCE_LIST_URL:-}
       THINFORGE_KEV_URL: ${THINFORGE_KEV_URL:-}
-      # Agent-Build im Backend deaktiviert — es wird nur die
-      # in agent-go/bin/ ausgelieferte, vorsignierte Binary. POST /agent/build
-      # liefert dann 403, und der First-Login-Auto-Build-Trigger ist ein No-Op.
+      # Agent-Build im Backend deaktiviert — genutzt wird nur die mit dem
+      # Release-Repo in agent-go/bin/ ausgelieferte Binary. Vorsigniert ist sie
+      # nicht: Signaturen sind je Server (eigener Minisign-Schluessel), eine
+      # .minisig wird nie mitgeliefert. Nach jedem Pull, der die Binary tauscht,
+      # unter Clients → Agent „Neu signieren" — sonst antworten Tools-ISO-Bau und
+      # VM-Start mit 409 (toolsIsoAgentBinaryUnsigned bzw.
+      # toolsIsoAgentSignatureInvalid), und die Geraete verwerfen das Update.
+      # POST /agent/build liefert 403, und der First-Login-Auto-Build-Trigger
+      # ist ein No-Op.
       THINFORGE_AGENT_BUILD_ENABLED: "false"
       DEBUG: "false"
       # Guacamole-Daemon (Remote-Desktop, Spec 2026-05-14)
@@ -179,13 +206,17 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: postgres
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD fehlt in .env — deploy.sh traegt sie nach}@redis:6379/0
       STORAGE_DIR: /data
       SIGNING_KEY_DIR: /data/keys
       # Parität zum Backend: der Worker aktiviert geplante Deployments —
       # er braucht dieselben Pfade (PXE/TFTP, dnsmasq, NFS-Config).
       TFTP_ROOT: /var/lib/tftpboot
       THINFORGE_ENABLED_PROFILES: ${THINFORGE_ENABLED_PROFILES:-}
+      # Groesse des Worker-Pools (leer = Vorgabe 24/2, crates/thinforge-core/
+      # src/config.rs); Summe mit der API gegen Postgres max_connections halten.
+      WORKER_DB_MAX_CONNECTIONS: ${WORKER_DB_MAX_CONNECTIONS:-}
+      WORKER_DB_MIN_CONNECTIONS: ${WORKER_DB_MIN_CONNECTIONS:-}
     volumes:
       - ${STORAGE_DIR:-./ThinForgeDaten}:/data
       - ${STORAGE_DIR:-./ThinForgeDaten}/ssh:/data/ssh
@@ -277,6 +308,16 @@ services:
       - frontend
 
   guacd:
+    # Braucht den Anker so noetig wie sonst kein Dienst: guacd loest den
+    # einteiligen Namen `backend` auf (ClientTarget.backend_service_name,
+    # BACKEND_SERVICE_NAME ist nirgends gesetzt) und baut darauf die
+    # VNC-Verbindung zum adressgeprueften Gate vor dem SSH-Tunnel
+    # (remote_desktop/guacd_gate.rs, das seinerseits nur Verbindungen von
+    # guacds Adresse annimmt). Ohne dns_search `.` haengt Dockers
+    # DNS die search-domain des Hosts an, und eine Wildcard beantwortet
+    # `backend.<domain>` mit einer externen Adresse — die Sitzung kaeme nie
+    # zustande und guacd baute eine Verbindung nach draussen auf.
+    <<: *no-search-domain
     image: guacamole/guacd:1.6.0
     container_name: thinforge-guacd
     restart: unless-stopped
@@ -545,6 +586,21 @@ services:
       - testing
     privileged: true
     network_mode: host
+    healthcheck:
+      # Dies ist das Bereitschaftssignal, auf das `docker compose up --wait` in
+      # cloningvm_service.rs wartet. Es MUSS im Container laufen: websockify ist
+      # an 127.0.0.1 gebunden (docker/cloning-vm/entrypoint.sh), damit die
+      # privilegierte, host-vernetzte VM-Konsole nicht im LAN haengt — genau
+      # daran haengt `guest_escape_only: true` in
+      # docs/security/container-exposure.yaml. Nur ein Test aus diesem Container
+      # heraus sieht denselben Loopback; eine Probe aus dem Backend-Container
+      # (Bridge-Netz, host.docker.internal -> Gateway) kann ihn nie erreichen.
+      # wget ist das BusyBox-Applet — curl ist im Image NICHT vorhanden.
+      test: ["CMD", "wget", "--spider", "-q", "-T", "2", "http://127.0.0.1:6081/vnc.html"]
+      interval: 2s
+      timeout: 3s
+      start_period: 3s
+      retries: 15
     mem_limit: ${CLONING_VM_MEM_LIMIT:-2560m}
     volumes:
       - ${STORAGE_DIR:-./ThinForgeDaten}/cloning-vm:/var/lib/thinforge/cloning-vm

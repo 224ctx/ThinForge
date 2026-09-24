@@ -14,7 +14,7 @@ Dieses Repo enthält alles, was ein Host zum Betrieb von ThinForge braucht — *
 | `docker/prometheus/`, `docker/grafana/` | Monitoring-Configs (Services sind **seit 2026-04-20 auskommentiert**, siehe unten) |
 | `scripts/` | Tools-ISO-Provisioning + Shell-Libraries, gemountet ins Backend |
 | `ansible/` | Playbooks, gemountet ins Backend |
-| `agent-go/bin/` | Signierte amd64-Agent-Binary, die das Backend an PXE-Clients ausliefert |
+| `agent-go/bin/` | amd64-Agent-Binary + `agent-version`, die das Backend an die Clients ausliefert — ohne Signatur, jeder Server signiert mit seinem eigenen Schlüssel (siehe „Agent-Binary aktualisieren“) |
 | `license/` | Leerer Mount-Placeholder (Backend schreibt License-Dateien rein) |
 | `docs/security/`, `docs/CHANGELOG.md` | Werden vom Backend/Frontend RO gemountet |
 | `anleitungen/` | Operator-Doku (DE + EN): Dashboard, Clients, Cloning, Rollouts, Netzwerk, Einstellungen |
@@ -65,7 +65,7 @@ Falls nach `install-deps.sh` die Gruppenmitgliedschaft für `docker` neu ist, bi
 
 ## .env-Konfiguration
 
-`install-deps.sh` füllt die Pflicht-Secrets (Postgres-/Grafana-/Semaphore-Passwort) mit `openssl rand`-Werten. Alles andere läuft mit Defaults.
+`install-deps.sh` füllt die Pflicht-Secrets (Postgres-/Grafana-/Semaphore-/Redis-Passwort) mit `openssl rand`-Werten. Alles andere läuft mit Defaults.
 
 Optional überschreiben, typischerweise **vor dem ersten `deploy.sh`**:
 
@@ -76,11 +76,12 @@ Optional überschreiben, typischerweise **vor dem ersten `deploy.sh`**:
 | `CLONING_VM_KVM_ENABLED` | `true` | Auf `false` setzen wenn der Host kein `/dev/kvm` hat (getestet Warnung in `install-deps.sh`) |
 | `MANAGEMENT_DNS` | leer (Fallback: Default-Gateway) | Wenn Clients per DHCP einen spezifischen Upstream-Resolver bekommen sollen |
 | `THINFORGE_ACCEPTANCE_LIST_MODE` | `local` | Auf `remote` nur wenn `THINFORGE_ACCEPTANCE_LIST_URL` gesetzt ist; sonst in Default lassen |
-| `THINFORGE_ENABLED_PROFILES` | auto-verwaltet | `deploy.sh` schreibt die Liste aus `START_PROFILES` rein — nicht manuell editieren, sonst verschwindet die Zeile beim nächsten Deploy |
+| `THINFORGE_ENABLED_PROFILES` | Standard von `deploy.sh` | `deploy.sh` trägt seinen Standard nur ein, solange die Zeile fehlt, leer ist oder einen früheren Standard trägt. Ein eigener Wert bleibt stehen — z. B. `testing` weglassen auf Hosts ohne KVM. Zeile löschen = zurück zum Standard |
 
 Nicht anfassen (werden auto-generiert / auto-verwaltet):
 
 - `POSTGRES_PASSWORD`, `GRAFANA_PASSWORD`, `SEMAPHORE_ADMIN_PASSWORD` — Zufallswerte aus `install-deps.sh`/`deploy.sh`
+- `REDIS_PASSWORD` — Pflicht: Redis läuft mit Passwort, ohne die Variable startet der Stack nicht (`docker compose` bricht mit „REDIS_PASSWORD fehlt in .env“ ab). `install-deps.sh` erzeugt sie, auf bestehenden Installationen hängt `deploy.sh` sie mit einem Zufallswert an. Ändern nur zusammen mit `docker compose up -d --force-recreate redis backend worker`
 - `SECRET_KEY` — wird beim ersten Backend-Start unter `${STORAGE_DIR}/.secret_key` materialisiert, nicht in `.env`
 
 ---
@@ -95,7 +96,7 @@ git pull            # nur nötig wenn Compose/Scripts sich geändert haben
 ./deploy.sh
 ```
 
-`deploy.sh` ist idempotent — Storage-Dirs werden nur angelegt wenn fehlend, TLS-Cert nur auf dem ersten Run, `.env`-Migrations (z. B. fehlende `SEMAPHORE_ADMIN_PASSWORD`) idempotent.
+`deploy.sh` ist idempotent — Storage-Dirs werden nur angelegt wenn fehlend, TLS-Cert nur auf dem ersten Run, `.env`-Migrations (z. B. fehlende `SEMAPHORE_ADMIN_PASSWORD` oder `REDIS_PASSWORD`) idempotent.
 
 Varianten:
 
@@ -105,14 +106,14 @@ Schema-Migrations einer **bestehenden** Postgres-DB laufen **im Backend-Containe
 
 ---
 
-## Agent-Binary rotieren
+## Agent-Binary aktualisieren
 
-Das Backend serviert `agent-go/bin/thinforge-agent-amd64` (+ `.minisig`) an PXE-Clients. Zum Austauschen:
+Das Release-Repo liefert `agent-go/bin/thinforge-agent-amd64` und `agent-version` **ohne** Signatur: jeder Server signiert die Binary mit seinem eigenen Minisign-Schlüssel, eine `.minisig` wird nie mitgeliefert. Nach einem `git pull`, der die Binary tauscht:
 
-1. Neue Binary + Minisig + Version aus einem Dev-Build (`scripts/build-and-sign.sh` im Source-Repo) in `agent-go/bin/` ablegen.
-2. `agent-version` auf die neue Version aktualisieren.
-3. `git commit -am "agent: bump vX.Y.Z"` + `git push`.
-4. Auf dem Host: `git pull`. Das Backend liest die Datei on-demand bei jedem Agent-Download-Request (`/api/klon/agent-binary`) — die neue Binary ist beim nächsten Client-Boot aktiv, ohne Container-Restart.
+1. `./deploy.sh` ausführen (oder nur `git pull` — das Backend liest die Datei bei jedem Agent-Download).
+2. In der Oberfläche unter **Clients → Agent** „Neu signieren“. Ohne neue Signatur lehnen Tools-ISO-Bau und VM-Start mit 409 ab, und die Geräte verwerfen das Update.
+
+Die Geräte holen sich die neue Version danach selbst (Prüfung beim Agent-Start und alle fünf Minuten).
 
 ---
 
