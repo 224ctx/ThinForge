@@ -261,6 +261,19 @@ do_finish() {
         warn "create-data-partition.sh not found — data partition must be created manually"
     fi
 
+    # Sanity-Check: ohne /data ist der gesamte Agent-State (Token, Cert,
+    # Binary, Updates) beim naechsten Reboot weg. Ohne diesen Riegel legen die
+    # `mkdir -p /data/...` weiter unten stillschweigend echte Verzeichnisse auf
+    # dem @root-Subvolume an; die installierte systemd-Unit traegt aber
+    # `Requires=data.mount` und ist damit nie erfuellbar — der Agent startet
+    # nie, der Client taucht nie in der Flotte auf, und beim ersten
+    # Delta-Update ist der ganze Zustand samt Token und Trust-Anchor fort.
+    # Erreichbar ueber den warn-Zweig direkt darueber: liegt die Tools-ISO
+    # ausserhalb der bekannten Mountpunkte, wird create-data-partition.sh nicht
+    # gefunden und do_finish lief bisher trotzdem weiter. Gleicher Riegel wie
+    # in install-debian.sh und install-debian-minimal.sh.
+    mountpoint -q /data || fatal "/data not mounted — aborting before agent install.\nRun advanced/create-data-partition.sh first (or mount the data partition manually), then start this script again."
+
     # ── Zusaetzliche Pakete ──────────────────────────────────────────
 
     log "Installing additional packages..."

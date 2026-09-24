@@ -1,0 +1,9 @@
+Contact: mailto:security@thinforge.org
+Expires: 2027-08-18T23:59:59.000Z
+Encryption: https://thinforge.org/.well-known/security-thinforge-org.asc
+Preferred-Languages: de, en
+Policy: https://thinforge.org/sicherheit.html
+Acknowledgments: https://thinforge.org/sicherheit.html#dank
+Canonical: https://thinforge.org/.well-known/security.txt
+Canonical: https://git.thinforge.org/thinforge/ThinForge-Dev/raw/branch/master/docs/security/security.txt
+Canonical: https://git.thinforge.org/thinforge/ThinForge-Release/raw/branch/master/docs/security/security.txt

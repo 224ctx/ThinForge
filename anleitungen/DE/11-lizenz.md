@@ -1,61 +1,55 @@
 # 11 — Lizenzierung
 
-ThinForge ist im **Free-Tier** voll funktional und verwaltet bis zu **50 aktive Clients** ohne Lizenzdatei. Darüber hinaus wird ein signiertes Lizenz-Bundle benötigt, das in erster Linie den Client-Zähler anhebt. Wird das Limit überschritten, wird der zuletzt hinzugekommene Client herabgestuft und verliert dabei **Premium-Funktionen** wie Delta-Updates, Rollouts und die Snapshot-Verwaltung.
+ThinForge verwaltet Clients **ohne Lizenzdatei unbegrenzt** und mit vollem Funktionsumfang — Delta-Updates, Rollouts und die Snapshot-Verwaltung inklusive. Lizenzpflichtig ist ausschließlich die **Aktivierung von VPN-Clients**: Ein signiertes Lizenz-Bundle legt fest, wie viele VPN-Clients gleichzeitig aktiviert sein dürfen (VPN-Sitzplätze). Ohne gültige Lizenz lässt sich kein VPN-Client aktivieren.
 
 ## Begriffe
 
 | Begriff | Bedeutung |
 |---|---|
-| **Aktive Clients** | Clients mit `is_lager = false`. Lager-Geräte zählen explizit nicht mit. |
-| **Free-Tier** | Keine Lizenzdatei hinterlegt oder abgelaufen + Grace-Period vorbei. Limit: 50. |
-| **Licensed** | Gültiges Bundle, `expires` in der Zukunft. Limit = `max_clients` aus dem Bundle. |
-| **Grace** | 60 Tage nach Ablauf. Limit bleibt auf `max_clients`, Warn-Banner. |
-| **Expired** | 60+ Tage nach Ablauf. Zurückfall auf Free-Tier (50 Clients). |
+| **VPN-Sitzplatz** | Ein VPN-Client, der einem Gerät zugeordnet und aktiviert ist. Deaktivieren gibt den Platz wieder frei. |
+| **Keine Lizenz** | Keine Lizenzdatei hinterlegt. Client-Verwaltung unbegrenzt, 0 VPN-Sitzplätze. |
+| **Lizenziert** | Gültiges Bundle, Ablaufdatum heute oder in der Zukunft. Sitzplätze = `max_vpn_clients` aus dem Bundle. |
+| **Abgelaufen** | Ablaufdatum überschritten. Eine Kulanzfrist gibt es nicht: neue VPN-Clients lassen sich nicht mehr aktivieren, bestehende laufen weiter. |
 
 ## Status ansehen
 
-Menü → **Einstellungen** → Tab **Lizenz** (Admin).
+Menü → **Einstellungen** → Tab **Lizenz** (nur Admins, auch lesend).
 
 Die Statuskarte zeigt:
 
-- **Lizenzdaten** (Lizenzinhaber, Lizenznummer, Ablaufdatum).
-- **Aktive Clients** gegen das Limit als Fortschrittsbalken — farblich gekennzeichnet:
+- **Lizenzdaten** (Lizenzinhaber, Lizenznummer, Gültig bis).
+- **Belegte VPN-Sitzplätze** gegen das Limit („X von Y VPN-Clients belegt") als Fortschrittsbalken — farblich gekennzeichnet:
   - blau bei unter 90 %,
   - orange ab 90 %,
   - rot, sobald das Limit erreicht ist.
-- **Banner**, falls Grace-Period aktiv oder Bundle abgelaufen ist.
+- **Banner**, falls die Lizenz abgelaufen ist.
 
-Im Free-Tier zeigt die Karte nur den Hinweis „Kostenlose Version" — das ist kein Fehler, sondern der Default-Zustand vieler Installationen.
+Ohne Lizenz zeigt die Karte nur den Hinweis, dass die Client-Verwaltung unbegrenzt ist und eine Lizenz nur für VPN-Clients gebraucht wird — das ist kein Fehler, sondern der Default-Zustand vieler Installationen.
 
 ## Lizenz-Bundle hochladen
 
 Vom Hersteller erhältst du ein `.7z`-Archiv, das `license.json` und `license.json.minisig` enthält. Archivpasswort und Signaturprüfung laufen intern; du hältst die Datei einfach bereit.
 
-1. **Bundle auswählen** → Datei mit `.7z`-Endung wählen.
-2. **Hochladen**.
-3. Server prüft Signatur und Inhalt. Häufige Fehlermeldungen:
-   - `bundle_not_7z` — Datei ist kein 7z (z. B. falsches Format).
-   - `bundle_wrong_password` — 7z-Passwort passt nicht zum Backend-Build (wahrscheinlich Bundle aus anderer Version).
-   - `bundle_missing_files` — Archiv enthält nicht beide erforderlichen Dateien.
-   - `signature_invalid` — Minisign-Signatur ist ungültig; häufig Kopierproblem oder manipuliertes Bundle.
-   - `payload_malformed` — JSON-Schema stimmt nicht.
+1. Karte **Lizenz hochladen** → Feld **Lizenzdatei (*.7z)** → Datei wählen.
+2. **Hochladen und aktivieren**.
+3. Server prüft Signatur und Inhalt. Mögliche Fehlermeldungen:
+   - „Keine gültige Lizenzdatei" (`bundle_not_7z`) — Datei ist kein 7z (z. B. falsches Format).
+   - „Lizenzdatei passt nicht zur Server-Version" (`bundle_wrong_password`) — 7z-Passwort passt nicht zum Backend-Build (wahrscheinlich Bundle aus anderer Version).
+   - „Lizenzdatei unvollständig" (`bundle_missing_files`) — Archiv enthält nicht beide erforderlichen Dateien.
+   - „Lizenzsignatur ungültig" (`signature_invalid`) — Minisign-Signatur ist ungültig; häufig Kopierproblem oder manipuliertes Bundle.
+   - „Lizenz-Version nicht mehr unterstützt" (`license_version_unsupported`) — altes Bundle ohne VPN-Sitzplätze; eine neue Lizenz (v2) ausstellen lassen.
+   - „Lizenz-Inhalt beschädigt" (`payload_malformed`) — JSON-Schema stimmt nicht.
 4. Bei Erfolg aktualisiert sich die Karte direkt, das neue Limit ist sofort aktiv.
 
 ## Lizenz entfernen
 
-**Entfernen** → Bestätigen. Die Datei wird vom Server gelöscht, Installationen fallen in den Free-Tier zurück. Bereits registrierte Clients über dem 50er-Limit bleiben funktional — nur das Anlegen **neuer** Clients wird blockiert, bis wieder Platz ist oder eine neue Lizenz hinterlegt wurde.
+**Lizenz entfernen** (nur sichtbar, wenn eine Lizenz hinterlegt ist; ohne Rückfrage). Die Datei wird vom Server gelöscht, die Installation hat danach 0 VPN-Sitzplätze. Bereits verbundene VPN-Clients werden nicht getrennt — die Deckelung greift erst beim nächsten Aktivieren.
 
 ## Verhalten beim Limit
 
-- **Neuen Client anlegen** (Einzel-Formular) → 403 mit Dialog „Limit erreicht", kein Insert.
-- **CSV-Import** → Import läuft durch; Zeilen, die über dem Limit liegen, werden übersprungen und zählen in der Result-Meldung als `rejected_for_license`.
-- **Bestehende Clients** werden nie deaktiviert — Heartbeat, Remote-Zugriff, Rollouts laufen weiter.
-
-> **Soft-Limit:** Wenn zeitgleich per CSV-Import und manuell neue Clients angelegt werden, kann das Limit kurz um 1–2 Einträge überschritten werden (Race-Condition — bewusstes Design). Für praktische Zwecke vernachlässigbar; bei Bedarf lässt sich die Lizenz mit höherem `max_clients` kurzfristig tauschen.
-
-## Lager-Geräte
-
-Ein Client mit gesetztem Flag **is_lager** (Detailformular → „Lager" aktivieren) zählt nicht zum Limit und wird in der Liste halbtransparent mit orangenem Chip angezeigt. Beim Ausrollen an einen Endkunden entfernst du das Flag von Hand im Detailformular; der Client zählt ab dann wieder.
+- **VPN-Client aktivieren** ohne gültige Lizenz oder ohne freien Sitzplatz → der Server lehnt ab; ist das Kontingent voll, nennt die Meldung belegte und verfügbare Plätze. Die Aktivierung selbst beschreibt [13 — VPN](13-vpn.md).
+- **Client anlegen, CSV-Import, Deployments, Rollouts, Updates** → von der Lizenz unabhängig.
+- **Bestehende VPN-Clients** werden nie deaktiviert — auch nicht nach Ablauf oder Entfernen der Lizenz.
 
 ## Lizenzverlängerung
 
@@ -64,4 +58,4 @@ Rechtzeitig vor dem Ablaufdatum ein neues Bundle beim Hersteller anfordern. Das 
 ## Nächste Schritte
 
 - Admin-Tools rund um Benutzer, TLS und Signing: [09 — Einstellungen](09-einstellungen.md).
-- Backup der Datenbank: siehe [09 — Einstellungen → Backup & Restore](09-einstellungen.md#tab-backup--restore) — enthält auch die Lizenzdatei.
+- Backup: siehe [09 — Einstellungen → Backup & Restore](09-einstellungen.md#backup--restore) — das System-Backup enthält auch die Lizenzdatei.

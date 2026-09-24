@@ -45,8 +45,8 @@ This manual is for **IT administrators** who operate ThinForge through the web i
 |------|---------|
 | **Thin Client** | Physical endpoint (PC, laptop) running a ThinForge-managed OS image |
 | **Clone** | A stored disk image with a version number (e.g. `v2026.06.22-004`), deployed to thin clients |
-| **Capture** | The action of extracting a disk image from a running cloning VM |
-| **Baseline** | The first version of a clone chain (`vX.000`), a complete image without a delta parent |
+| **Capture** | Recording the disk of a physical client as an image — the device boots into a capture environment via PXE (Cloning → Captures) |
+| **Baseline** | The first version of a clone chain (e.g. `v2026.06.22-001`; older chains still carry `vX.000`), a complete image without a delta parent |
 | **Delta update** | Incremental update from the previous clone to a new version (e.g. `v2026.06.22-004 → v2026.06.22-005`) |
 | **Rollout** | Distribution of a clone to a list or group of thin clients |
 | **Agent** | Small service on each thin client, handling heartbeat, updates, and remote commands |
@@ -55,8 +55,12 @@ This manual is for **IT administrators** who operate ThinForge through the web i
 
 ## Roles in the system
 
-- **Admin** — full access including user management, TLS, signing keys, factory reset
-- **Operator** — day-to-day work: clients, cloning, rollouts, tasks
-- **Viewer** — read-only: dashboard, client list
+- **Admin** — full access. On top of what an operator may do: user management, TLS, signing keys, factory reset, deleting clients and groups, **the entire network infrastructure** (DHCP, DNS, PXE, server interfaces) and **service control** (starting, stopping and restarting containers)
+- **Operator** — day-to-day work: clients, groups, cloning, capture jobs, images, rollouts, tasks
+- **Viewer** — read-only: dashboard, lists, reports
 
-This manual takes the **operator** perspective. Admin-specific topics are grouped in [09 — Settings](09-settings.md).
+Regardless of role, everyone may change their own password and turn two-factor sign-in on or off.
+
+This manual takes the **operator** perspective. Admin-specific topics are grouped in [09 — Settings](09-settings.md); the network settings in [07 — Network](07-network.md) became admin territory on 2026-08-31 as well.
+
+> **A visible menu is not the same as an allowed action.** The interface does not hide most buttons based on role. An operator therefore sees the network and services views including their buttons; clicking one is refused by the server and the interface shows an error. That is not a defect — it is the role check, which since 2026-08-31 lives consistently on the server rather than only in the display.

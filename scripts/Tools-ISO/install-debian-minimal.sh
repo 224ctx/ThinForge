@@ -541,7 +541,13 @@ offer_vdi_install() {
 # schritt noetig wie bei der Live-ISO-Variante.)
 
 do_finish() {
-  
+    # Vor dem Bootstrap-Block: dessen su-Neustart reicht den Wert als
+    # --server=… weiter. Stand die Zuweisung erst dahinter, las der Neustart
+    # die ungesetzte globale Variable, `${THINFORGE_SERVER:+…}` ergab nichts,
+    # und der eingetippte Server ging wortlos verloren (Agent und NTP fielen
+    # auf server_url der ISO bzw. das Default-Gateway zurueck).
+    local THINFORGE_SERVER="${1:-}"
+
 # --- SUDO BOOTSTRAP BLOCK ---
     # Fängt Aufrufe über "su root" ab, richtet sudo ein und startet das Skript via "sudo" neu.
     if [ "$EUID" -eq 0 ] && [ -z "${SUDO_USER:-}" ]; then
@@ -560,7 +566,18 @@ do_finish() {
             # Temporär NOPASSWD vergeben, damit der Neustart ohne TTY/Passwort-Prompt sofort durchläuft
             echo "$orig_user ALL=(ALL:ALL) NOPASSWD: ALL" > "/etc/sudoers.d/thinforge-bootstrap"
             chmod 0440 "/etc/sudoers.d/thinforge-bootstrap"
-            
+
+            # Ab hier darf die Datei den Block unter KEINEN Umständen überleben:
+            # sie gibt einem Desktop-Konto passwortloses root, und dieses Konto
+            # ist dasselbe, dem configure_autologin gleich LightDM-Autologin
+            # einrichtet — bliebe sie liegen und würde die VM so geklont, hätte
+            # jeder, der an einer Kiosk-Sitzung sitzt, root ohne Passwort auf
+            # jedem Thin Client. Die Aufräumzeile am Ende des Blocks läuft nur
+            # im NEU gestarteten Prozess. Deshalb hier ein EXIT-Trap, der jeden
+            # vorzeitigen Abbruch zwischen dieser Zeile und dem `su` abdeckt
+            # (z. B. ein Aus durch `set -euo pipefail` in den Zeilen darunter).
+            trap 'rm -f /etc/sudoers.d/thinforge-bootstrap' EXIT
+
             log "Stelle Umgebungsvariablen für die grafische Oberfläche wieder her..."
             local envpid
             envpid=$(pgrep -u "$orig_user" -x xfce4-session 2>/dev/null | head -1 || true)
@@ -572,14 +589,37 @@ do_finish() {
                 export XAUTHORITY=$(tr '\0' '\n' < "/proc/$envpid/environ" 2>/dev/null | sed -n 's/^XAUTHORITY=//p' | head -1)
             fi
             
-            # Fallbacks, falls der Grep fehlschlägt
-            [ -z "$DISPLAY" ] && export DISPLAY=":0"
-            [ -z "$XAUTHORITY" ] && export XAUTHORITY="/home/$orig_user/.Xauthority"
+            # Fallbacks, falls der Grep fehlschlägt. `:-` ist Pflicht: findet
+            # pgrep keinen Prozess (kein Desktop, keine systemd-User-Instanz)
+            # oder ist dessen environ nicht lesbar, blieb der Zweig oben aus
+            # und beide Variablen sind ungesetzt — `set -u` brach do_finish
+            # dann hier mit „DISPLAY: unbound variable" ab, bevor überhaupt
+            # etwas eingerichtet war.
+            [ -z "${DISPLAY:-}" ] && export DISPLAY=":0"
+            [ -z "${XAUTHORITY:-}" ] && export XAUTHORITY="/home/$orig_user/.Xauthority"
             
             log "Starte Skript als '$orig_user' über 'sudo' neu..."
             
-            # Neustart via sudo (passiert dank NOPASSWD nun unsichtbar und ohne TTY-Error)
-            exec su -s /bin/bash "$orig_user" -c "sudo -E bash \"$0\" finish ${THINFORGE_SERVER:+--server=\"$THINFORGE_SERVER\"}"
+            # Neustart via sudo (passiert dank NOPASSWD nun unsichtbar und ohne TTY-Error).
+            #
+            # Bewusst OHNE `exec`: mit `exec` ersetzt der Neustart diesen
+            # Prozess, es bleibt niemand übrig, der aufräumt — verweigert
+            # PAM/su den Wechsel (abgelaufenes Konto, /etc/nologin, keine
+            # gültige Shell), bliebe die NOPASSWD-Datei für immer liegen. So
+            # warten wir stattdessen auf den Kindprozess, räumen in JEDEM Fall
+            # auf und reichen dessen Rückgabewert weiter. Der Kindprozess
+            # entfernt die Datei am Ende des Blocks selbst; sudo prüft die
+            # sudoers nur einmal beim Aufruf, das Entziehen währenddessen
+            # stört ihn also nicht.
+            local bootstrap_rc=0
+            su -s /bin/bash "$orig_user" -c "sudo -E bash \"$0\" finish ${THINFORGE_SERVER:+--server=\"$THINFORGE_SERVER\"}" \
+                || bootstrap_rc=$?
+            rm -f /etc/sudoers.d/thinforge-bootstrap
+            trap - EXIT
+            if [ "$bootstrap_rc" -ne 0 ]; then
+                error "Neustart über sudo fehlgeschlagen (Status $bootstrap_rc). Temporäre sudo-Rechte wurden zurückgenommen."
+            fi
+            exit "$bootstrap_rc"
         fi
     fi
     
@@ -587,9 +627,7 @@ do_finish() {
     # (Dieser Code wird erst erreicht, wenn das Skript erfolgreich über sudo neu gestartet wurde)
     [ -f /etc/sudoers.d/thinforge-bootstrap ] && rm -f /etc/sudoers.d/thinforge-bootstrap
     # --- ENDE SUDO BOOTSTRAP BLOCK ---
-  
-  
-    local THINFORGE_SERVER="${1:-}"
+
 
     log "ThinForge configuration in the installed system..."
 
@@ -634,11 +672,40 @@ do_finish() {
             log "Installing grub-btrfs..."
             apt-get install -y -qq grub-btrfs 2>/dev/null || warn "grub-btrfs could not be installed"
         else
-            log "Installing grub-btrfs from GitHub..."
+            # grub-btrfs aus dem GitHub-Quelltext bauen. Drei Dinge waren hier
+            # falsch:
+            #  (1) Ungepinnt — es lief als root das, was gerade auf dem
+            #      Default-Branch stand, und zwar auf der Maschine, die zum
+            #      Gold-Abbild der Flotte wird. Jetzt fester Tag.
+            #  (2) Festes /tmp/grub-btrfs — /tmp ist world-writable; ein
+            #      liegengebliebenes Verzeichnis aus einem abgebrochenen Lauf
+            #      oder ein untergeschobenes laesst `git clone` scheitern.
+            #      Jetzt ein eigenes mktemp-Verzeichnis.
+            #  (3) `cd /tmp && git clone && cd … && make install` als
+            #      &&-Liste: `set -e` greift nur beim LETZTEN Glied, ein
+            #      fehlgeschlagener clone (kein Netz, kein git — vor diesem
+            #      Punkt laeuft kein `apt-get update`, das Nachinstallieren
+            #      von git/make kann also selbst scheitern) lief stumm durch,
+            #      und der Abschlussbanner versprach danach trotzdem
+            #      "GRUB: ThinForge boot logic with rollback". Jetzt eine
+            #      Subshell hinter einem gemeinsamen Guard, plus Nachweis,
+            #      dass die Datei existiert, die gleich darunter gepatcht wird.
+            local GRUB_BTRFS_TAG="v4.14"
+            log "Installing grub-btrfs ${GRUB_BTRFS_TAG} from GitHub..."
             apt-get install -y -qq git make 2>/dev/null || true
-            cd /tmp && git clone https://github.com/Antynea/grub-btrfs.git && cd grub-btrfs && make install
-            rm -rf /tmp/grub-btrfs
-            cd /
+            local gb_tmp
+            gb_tmp=$(mktemp -d)
+            (
+                cd "$gb_tmp" \
+                && git clone --depth 1 --branch "$GRUB_BTRFS_TAG" \
+                       https://github.com/Antynea/grub-btrfs.git \
+                && cd grub-btrfs \
+                && make install
+            ) || warn "grub-btrfs installation failed — no snapshot boot entries"
+            rm -rf "$gb_tmp"
+            if [ ! -f /etc/grub.d/41_snapshots-btrfs ]; then
+                warn "grub-btrfs did not install /etc/grub.d/41_snapshots-btrfs — rollback boot entries will be missing"
+            fi
         fi
     fi
 
@@ -908,7 +975,17 @@ NTPCONF
     log "Installing ThinForge agent..."
 
     local INSTALL_SCRIPT
-    INSTALL_SCRIPT="$(find_tools_iso_script advanced/1-create-client-management.sh)"
+    # `|| true` wie an den drei Geschwisterstellen (507/521/1011):
+    # find_tools_iso_script liefert 1, wenn es nichts findet, und ohne Guard
+    # beendet `set -e` do_finish direkt hier — wortlos, gleich nach
+    # "Installing ThinForge agent...". Der aussagekraeftige fatal-Zweig
+    # darunter war damit toter Code, und alle folgenden Schritte
+    # (installed_version, sshd-Haertung, dist-upgrade, initramfs, Branding,
+    # VDI) blieben auf einer Maschine aus, auf der NetBird, chrony und die
+    # Paketauswahl schon installiert sind. Ausgeloest wird das ausgerechnet
+    # von der Wiederherstellung, die der fatal-Text selbst empfiehlt: Skript
+    # aus einer Kopie starten, Tools-ISO nicht gemountet.
+    INSTALL_SCRIPT="$(find_tools_iso_script advanced/1-create-client-management.sh || true)"
 
     if [ -n "$INSTALL_SCRIPT" ] && [ -f "$INSTALL_SCRIPT" ]; then
         log "Agent script found: $INSTALL_SCRIPT"

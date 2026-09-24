@@ -137,11 +137,16 @@ log "Ziel-Disk: $DISK"
 log "Disk-Groesse: ${DISK_GB} GB (${DISK_BYTES} Bytes)"
 
 # -- System-Groesse berechnen ---------------------------------------------
-# System = Disk - ESP (~1GB aufgerundet) - Daten
-SYSTEM_GB=$((DISK_GB - 1 - DATA_SIZE_GB))
+# System = Disk - ESP (auf volle GB aufgerundet) - Daten
+# Die ESP-GB leiten sich aus ESP_SIZE_MB ab, die sgdisk unten tatsaechlich
+# anlegt. Ein fest eingetragenes „1" liess bei ESP_SIZE_MB=2048 eine um 1 GB
+# zu kleine Disk durch die Mindestpruefung, und die Systempartition lag dann
+# unter MIN_SYSTEM_GB.
+ESP_GB=$(( (ESP_SIZE_MB + 1023) / 1024 ))
+SYSTEM_GB=$((DISK_GB - ESP_GB - DATA_SIZE_GB))
 
 if [[ $SYSTEM_GB -lt $MIN_SYSTEM_GB ]]; then
-    fatal "Disk zu klein! ${DISK_GB} GB reicht nicht fuer ${MIN_SYSTEM_GB}GB System + ${DATA_SIZE_GB}GB Daten.\nMindestens $((MIN_SYSTEM_GB + DATA_SIZE_GB + 1)) GB erforderlich."
+    fatal "Disk zu klein! ${DISK_GB} GB reicht nicht fuer ${MIN_SYSTEM_GB}GB System + ${DATA_SIZE_GB}GB Daten.\nMindestens $((MIN_SYSTEM_GB + DATA_SIZE_GB + ESP_GB)) GB erforderlich."
 fi
 
 log "System-Partition: ${SYSTEM_GB} GB (Rest nach ESP + Daten)"

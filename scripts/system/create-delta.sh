@@ -458,13 +458,27 @@ action_receive() {
     MNT=$(mktemp -d)
     mount -o compress=zstd:1 "$sys_part" "$MNT"
 
+    local received=0 already=0 failed=0
+
     for delta in "${delta_files[@]}"; do
-        [ -f "$delta" ] || { warn "Delta nicht gefunden: $delta — ueberspringe"; continue; }
+        if [ ! -f "$delta" ]; then
+            warn "Delta nicht gefunden: $delta — ueberspringe"
+            failed=$((failed + 1))
+            continue
+        fi
 
         local snap_name
-        snap_name=$(basename "$delta" | sed -n 's/.*_to_\(v[0-9._]*\)\(\.zst\|_home\.zst\)/\1/p')
+        # Deckt BEIDE Versionsformen ab: die aktuelle CalVer-Form
+        # vYYYY.MM.DD-NNN und die alte vN.NNN. Die fruehere Zeichenklasse
+        # `[0-9._]` kannte den Bindestrich des CalVer-Zaehlers nicht und traf
+        # damit keine einzige echte Delta-Datei — jede wurde uebersprungen,
+        # und der Lauf meldete trotzdem Erfolg.
+        # Der Unterstrich darf NICHT in die Klasse: sed matcht laengstmoeglich
+        # und kennt kein Backtracking, `_home` wanderte sonst in die Version.
+        snap_name=$(basename "$delta" | sed -nE 's/.*_to_(v[0-9][0-9.-]*)(_home)?\.zst$/\1/p')
         if [ -z "$snap_name" ]; then
             warn "Kann Snapshot-Version nicht aus Dateiname ableiten: $(basename "$delta") — ueberspringe"
+            failed=$((failed + 1))
             continue
         fi
         local subvol_suffix=""
@@ -473,6 +487,7 @@ action_receive() {
 
         if btrfs subvolume show "$MNT/$expected" &>/dev/null; then
             log "$expected existiert bereits — ueberspringe"
+            already=$((already + 1))
             continue
         fi
 
@@ -481,13 +496,24 @@ action_receive() {
 
         if ! btrfs subvolume show "$MNT/$expected" &>/dev/null; then
             warn "btrfs receive hat $expected nicht erzeugt — fahre fort"
+            failed=$((failed + 1))
         else
             log "Empfangen: $expected"
+            received=$((received + 1))
         fi
     done
 
-    log "Alle Deltas angewendet. Subvolumes:"
-    btrfs subvolume list "$MNT" | grep "@snap_"
+    log "Deltas: ${received} empfangen, ${already} bereits vorhanden, ${failed} fehlgeschlagen (von ${#delta_files[@]})."
+    log "Subvolumes:"
+    btrfs subvolume list "$MNT" | grep "@snap_" || echo "  (keine)"
+
+    # Keinen Erfolg vortaeuschen: bisher stand hier unbedingt "Alle Deltas
+    # angewendet" und der Aufruf endete mit 0, selbst wenn keine einzige Datei
+    # verarbeitet wurde. Ein Wiederholungslauf, bei dem die Snapshots schon da
+    # sind, bleibt dagegen erfolgreich — das ist der legitime Fall.
+    if [ "$failed" -gt 0 ]; then
+        fatal "${failed} Delta-Datei(en) konnten nicht angewendet werden."
+    fi
 }
 
 action_merge() {

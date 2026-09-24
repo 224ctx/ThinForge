@@ -3,9 +3,12 @@
 -- Konsolidiert alle bisherigen Migrationen (Stand 2026-05-21) in einen
 -- einzigen Apply. Vorteil: fresh-Deploys laufen in einer Transaktion durch;
 -- das Drift-Risiko aus „Schema partial migriert, _sqlx_migrations nur
--- teil-getrackt" entfällt komplett. Tradeoff: jede DB die schon eine alte
--- Migrations-Zeile mit altem Checksum trägt, MUSS gewipt werden —
--- sqlx::Migrator weigert sich sonst (Checksum-Mismatch).
+-- teil-getrackt" entfällt komplett. Eine DB mit Zeilen älterer Migrationen
+-- oder alter Prüfsumme für Version 1 muss dafür NICHT gewipt werden:
+-- thinforge-migrate gleicht `_sqlx_migrations` vor dem Lauf ab (veraltete
+-- Zeilen > 1 löschen, Prüfsumme von Version 1 auffrischen), sonst verweigerte
+-- sqlx::Migrator den Start (Checksum-Mismatch). Neu initialisiert werden muss
+-- nur eine Datenbank von vor der VPN-Umstellung (Abweisung im Bootstrap).
 --
 -- Konsolidierungs-Historie:
 --   2026-05-07 — Initial-Konsolidierung der ehemaligen 0001..0007.
@@ -23,8 +26,19 @@
 --                Host-Module als Freigaben und loescht die vier Tabellen
 --                anschliessend.
 --
--- Schema-Änderungen NACH dem letzten Konsolidierungs-Stand gehen wieder in
--- separate, numerierte Migrations (0002_*.sql, 0003_*.sql, …).
+-- Regel für Schema-Änderungen: Diese Datei bleibt die EINZIGE Migration. Eine
+-- Änderung gehört HIER hinein und zusätzlich als idempotente Anweisung ans Ende
+-- von `apply_consolidated_backfills` (crates/thinforge-migrate/src/main.rs;
+-- deren Doku-Kommentar nennt die Regeln für Backfill-Anweisungen), damit
+-- bestehende Datenbanken sie beim nächsten Start nachziehen — NIE in eine
+-- eigene 0002_*.sql. Grund: docker-entrypoint-initdb.d führt auf einer frischen
+-- Datenbank JEDE .sql-Datei dieses Ordners aus, der Migrate-Bootstrap stempelt
+-- aber nur Version 1 als angewendet; sqlx::run() wendet eine 0002 danach ein
+-- zweites Mal an → „relation … already exists" → Crash-Loop von Backend und
+-- Worker (2026-05-30 mit 0002_managed_certificates, siehe Abschnitt 33).
+-- Diese Datei zu ändern ist dagegen sicher: der Bootstrap frischt die
+-- Prüfsumme von Version 1 in `_sqlx_migrations` bei jedem Start auf. Der Test
+-- `es_gibt_nur_die_eine_baseline_migration` (main.rs) hält die Regel fest.
 --
 -- Run-Pfad: docker-entrypoint-initdb.d (Postgres-Erst-Init) ODER
 -- thinforge-migrate beim Backend-Start (sqlx::migrate!("./migrations")).
@@ -56,7 +70,6 @@ CREATE TYPE rollbacktaskstatus AS ENUM ('active', 'completed', 'aborted');
 CREATE TYPE rollbacktaskclientstatus AS ENUM ('pending', 'prepared', 'completed');
 CREATE TYPE rolloutstatus AS ENUM ('draft', 'active', 'paused', 'completed', 'cancelled');
 CREATE TYPE rolloutclientstatus AS ENUM ('pending', 'deploying', 'done', 'failed', 'cancelled');
-CREATE TYPE capturejobstatus AS ENUM ('pending', 'capturing', 'done', 'failed', 'cancelled');
 
 -- ── 1. users ────────────────────────────────────────────────────────────────
 
@@ -119,10 +132,29 @@ CREATE TABLE audit_log (
     details       JSONB,
     ip_address    INET,
     timestamp     TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    PRIMARY KEY (id)
+    -- Verdichtung wiederholter Anmeldeversuche (Review 2026-09-02, A4):
+    -- Fehlversuche einer NICHT angemeldeten Anfrage schreiben je Minute EINE
+    -- Zeile, die bei jedem weiteren Versuch hochgezaehlt wird
+    -- (`details.count`, `first_at`, `last_at`, Beispielnamen). Vorher legte
+    -- jeder Versuch eine eigene Zeile an, ohne Deckel je Quelle.
+    -- `aggregation_key` fasst Aktion, Ressourcentyp, Grund, Konto und
+    -- Absender zu einem Text zusammen (ein fehlender Absender steht als
+    -- leerer Teil darin, nie als NULL — ein eindeutiger Index hielte zwei
+    -- NULLs fuer verschieden, und der Upsert griffe genau bei Anfragen ohne
+    -- Absender nicht). Bei gewoehnlichen Zeilen sind beide Spalten NULL.
+    aggregation_key    TEXT,
+    aggregation_minute TIMESTAMPTZ,
+    PRIMARY KEY (id),
+    CONSTRAINT audit_log_aggregation_pair
+        CHECK ((aggregation_key IS NULL) = (aggregation_minute IS NULL))
 );
 
 CREATE INDEX idx_audit_created ON audit_log (timestamp DESC);
+-- Ziel des Upserts in `audit_service::versuch_verbuchen`: je Schluessel und
+-- Minute hoechstens eine Zeile, auch bei gleichzeitigen Anfragen.
+CREATE UNIQUE INDEX ux_audit_log_aggregation
+    ON audit_log (aggregation_key, aggregation_minute)
+    WHERE aggregation_key IS NOT NULL;
 
 -- ── 4. gruppen ──────────────────────────────────────────────────────────────
 
@@ -537,7 +569,16 @@ CREATE TABLE rollouts (
     created_at              TIMESTAMPTZ    NOT NULL DEFAULT now(),
     updated_at              TIMESTAMPTZ    NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
-    FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE RESTRICT
+    FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE RESTRICT,
+    -- Bis zum 2026-09-05 stand `gruppe_id` ohne Fremdschluessel da: nach dem
+    -- Loeschen einer Gruppe zeigte die Spalte auf eine tote UUID, und der
+    -- Bediener bekam beim Start nur „No eligible clients" zu sehen.
+    -- SET NULL statt RESTRICT ist nur deshalb zulaessig, weil `launch_rollout`
+    -- einen Gruppen-Rollout ohne Gruppe seither fail-closed abweist
+    -- (`errors.rollouts.groupScopeGroupGone` — es wird KEIN Geraet gewaehlt) und
+    -- `delete_group` das Loeschen einer Gruppe mit nicht abgeschlossenem
+    -- Rollout schon vorher mit 409 verhindert.
+    FOREIGN KEY (gruppe_id) REFERENCES gruppen (id) ON DELETE SET NULL
 );
 
 -- ── 18. rollout_clients ─────────────────────────────────────────────────────
@@ -588,6 +629,10 @@ CREATE TABLE clone_deployments (
     wol_before_minutes               INTEGER,
     wol_sent                         BOOLEAN               NOT NULL DEFAULT false,
     post_action                      VARCHAR(20)           NOT NULL DEFAULT 'reboot',
+    -- Online gemeldete Zielgeraete nach der Aktivierung per SSH neu starten
+    -- (Neustart-Auftrag je Geraet); seit 2026-09-11, Vorgabe an. Bei
+    -- BitTorrent erst, wenn der Seeder die Torrents bereitgestellt hat.
+    reboot_now                       BOOLEAN               NOT NULL DEFAULT true,
     maintenance_window_id            UUID,
     -- Stage-Deployments von Image-Rollouts: activate_stage legt pro Stage ein
     -- clone_deployment an, damit Callbacks/Safety-Net/NFS-Grant identisch zu
@@ -617,12 +662,28 @@ CREATE TABLE clone_deployment_clients (
     bt_download_progress INTEGER,
     bt_current_partition VARCHAR(100),
     callback_token      VARCHAR(64),
+    -- Wann fuer das Geraet der Neustart-Auftrag (ssh_command reboot) entstand;
+    -- NULL = keiner (offline, reboot_now abgewaehlt, geplant). Wird beim
+    -- erneuten Bewaffnen (restart) geleert.
+    reboot_sent_at      TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
     FOREIGN KEY (deployment_id) REFERENCES clone_deployments (id) ON DELETE CASCADE,
     FOREIGN KEY (client_id)     REFERENCES clients           (id) ON DELETE CASCADE
 );
+
+-- Beide Fremdschluessel sind alleinige Suchbedingung haeufiger Abfragen:
+-- PXE-Boot, DHCP-Ereignis und Rueckrufe suchen je Geraet den offenen Eintrag
+-- (`client_id = … AND status IN ('pending','deploying')`), Deployment-Ansicht
+-- und Multicast-Tick lesen je Deployment (`deployment_id = …`), und das
+-- ON DELETE CASCADE beim Loeschen eines Geraets sucht ueber `client_id`. Ohne
+-- Index war jede davon ein Seq-Scan ueber eine Tabelle, die mit Geraeten mal
+-- Deployments waechst (Review 2026-09-02, sql-migrate-correctness:D2).
+CREATE INDEX ix_clone_deployment_clients_client_id
+    ON clone_deployment_clients (client_id, status);
+CREATE INDEX ix_clone_deployment_clients_deployment_id
+    ON clone_deployment_clients (deployment_id);
 
 -- ── 21. capture_jobs ────────────────────────────────────────────────────────
 
@@ -636,10 +697,20 @@ CREATE TABLE capture_jobs (
     error_message  TEXT,
     post_action    VARCHAR(20) NOT NULL DEFAULT 'shutdown',
     callback_token VARCHAR(64),
+    -- Wann der Neustart-Auftrag fuer das Geraet entstand (reboot_now beim
+    -- Anlegen, Geraet online gemeldet); NULL = keiner. Beim Restart geleert.
+    reboot_sent_at TIMESTAMPTZ,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
-    FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
+    FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE,
+    -- Die fuenf Zustaende eines Aufnahme-Auftrags (CaptureJobStatus). Bis
+    -- 2026-09-23 war die Spalte freier Text, und daneben stand ein Datentyp
+    -- capturejobstatus, den keine Spalte nutzte: ein Tippfehler in einem
+    -- Schreibweg ging still durch (Review 2026-09-02 D3/A3). Bestands-DBs:
+    -- thinforge-migrate/src/aufnahme_status.rs.
+    CONSTRAINT capture_jobs_status_check
+        CHECK (status IN ('pending', 'capturing', 'done', 'failed', 'cancelled'))
 );
 
 -- ── 22. update_deltas ───────────────────────────────────────────────────────
@@ -695,6 +766,17 @@ CREATE TABLE update_rollout_clients (
     download_bytes_total     BIGINT,
     download_rate_mbit       DOUBLE PRECISION,
     download_retry_count     INT                        NOT NULL DEFAULT 0,
+    -- Abbrueche im LAUFENDEN Zwischenschritt einer Update-Kette; das Budget
+    -- max_retries greift hierauf. Der Hop-Reset (update_service
+    -- update_client_rollout_status) setzt ihn zurueck, download_retry_count
+    -- bleibt die Summe ueber alle Schritte (Bericht, Oberflaeche „Retry N").
+    download_hop_retry_count INT                        NOT NULL DEFAULT 0,
+    -- Zeitpunkt des Slot-Anspruchs. Deckel gegen ein Geraet, das seinen
+    -- globalen Download-Slot unbegrenzt haelt (delta_download_slot::renew_lease).
+    download_slot_since      TIMESTAMPTZ,
+    -- Stand von download_bytes_received bei der letzten Verlaengerung. Ohne
+    -- Fortschritt seit dann wird nicht verlaengert; die Lease laeuft aus.
+    download_bytes_at_renew  BIGINT                     NOT NULL DEFAULT 0,
     created_at               TIMESTAMPTZ                NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ                NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
@@ -713,6 +795,24 @@ CREATE INDEX idx_url_clients_active_download
 CREATE INDEX idx_url_clients_token_hash
     ON update_rollout_clients (download_token_hash)
  WHERE download_token_hash IS NOT NULL;
+
+-- Hoechstens EIN offener Eintrag je Geraet (Review 2026-09-02,
+-- update_service.rs:2075). Beide Suchen des Heartbeat-Wegs
+-- (`get_pending_update_for_client`, `update_client_rollout_status`) fanden
+-- vorher einen beliebigen von mehreren; `release_slot` fasste mit
+-- `WHERE client_id = ...` sogar alle auf einmal an, sodass ein zweiter Rollout
+-- als erledigt galt, ohne je ein Delta ausgeliefert zu haben.
+--
+-- Das Praedikat spiegelt `is_terminal_client_status` (update_service.rs):
+-- terminal sind confirmed/failed/rolled_back/signature_failed, alles andere
+-- gilt als offen. Als Negativliste geschrieben, damit ein spaeter ergaenzter
+-- Status automatisch als offen zaehlt — so wie im Rust-Code auch.
+CREATE UNIQUE INDEX ux_url_clients_open_per_client
+    ON update_rollout_clients (client_id)
+ WHERE status NOT IN ('confirmed'::updaterolloutclientstatus,
+                      'failed'::updaterolloutclientstatus,
+                      'rolled_back'::updaterolloutclientstatus,
+                      'signature_failed'::updaterolloutclientstatus);
 
 -- ── 25. rollback_tasks ──────────────────────────────────────────────────────
 
@@ -774,8 +874,9 @@ CREATE TABLE client_pending_snapshot_deletions (
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_pending_deletions_client
-    ON client_pending_snapshot_deletions (client_id);
+-- Kein eigener Index auf client_id: der Primaerschluessel beginnt mit der
+-- Spalte und bedient jedes `WHERE client_id = …` schon. Der fruehere
+-- idx_pending_deletions_client war reine Schreiblast (Review 2026-09-02, D5).
 
 -- ── 29. defective_versions ──────────────────────────────────────────────────
 --
@@ -920,3 +1021,12 @@ CREATE TABLE fleet_daily (
     PRIMARY KEY (id),
     UNIQUE (snapshot_date)
 );
+
+-- ── 35. Eindeutiger DNS-Name je Freigabe (Befund V110, 2026-09-06) ──────────
+-- Die dnsmasq-Hosteintraege werden allein ueber den Hostnamen gepflegt: zwei
+-- Freigaben mit demselben `dns_name` ueberschrieben einander den Eintrag, und
+-- das Loeschen oder Umbenennen der einen nahm der anderen den Namen — die
+-- Oberflaeche zeigte ihn weiter als eingerichtet. Partiell: NULL heisst „kein
+-- Name" und darf beliebig oft vorkommen; case-insensitiv wie dnsmasq.
+CREATE UNIQUE INDEX ux_vpn_exposures_dns_name
+    ON vpn_exposures (lower(dns_name)) WHERE dns_name IS NOT NULL;

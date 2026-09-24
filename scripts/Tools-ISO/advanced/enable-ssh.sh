@@ -63,6 +63,28 @@ echo "[ssh] Key installiert: /root/.ssh/authorized_keys"
 if [ -f /etc/ssh/sshd_config ]; then
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
     sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+    # Passwort-Login deaktivieren — nur Server-Key erlaubt. Ohne diese beiden
+    # Zeilen bleibt Debians Default `PasswordAuthentication yes` stehen: das
+    # Skript haerteter nur root, waehrend das Desktop-/Autologin-Konto (das
+    # install-debian-minimal.sh in die Gruppe sudo steckt) per Passwort aus
+    # dem LAN erreichbar bleibt — und das LAN ist in diesem Modell der
+    # Angreifer. Gleiche Behandlung wie in 1-create-client-management.sh,
+    # install-debian.sh, install-debian-minimal.sh und install-arch.sh; wird
+    # das Skript nie gefolgt von 1-create-client-management.sh ausgefuehrt,
+    # wird das Abbild sonst in diesem Zustand geklont.
+    if grep -q "^#\?PasswordAuthentication" /etc/ssh/sshd_config; then
+        sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+    else
+        echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+    fi
+    if grep -q "^#\?KbdInteractiveAuthentication" /etc/ssh/sshd_config; then
+        sed -i 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' /etc/ssh/sshd_config
+    else
+        echo "KbdInteractiveAuthentication no" >> /etc/ssh/sshd_config
+    fi
+    echo "[ssh] sshd: nur Key-Authentifizierung (Passwort-Login aus)"
+else
+    echo "[ssh] WARNUNG: /etc/ssh/sshd_config nicht gefunden — Passwort-Login NICHT deaktiviert!"
 fi
 
 # Host-Keys generieren falls noetig
@@ -87,6 +109,6 @@ echo ""
 echo "[ssh] =========================================="
 echo "[ssh] SSH bereit!"
 echo "[ssh]   IP:    ${IP:-unbekannt}"
-echo "[ssh]   User:  root (nur Key-Auth)"
+echo "[ssh]   User:  root (nur Key-Auth; Passwort-Login systemweit aus)"
 echo "[ssh]   Port:  22"
 echo "[ssh] =========================================="

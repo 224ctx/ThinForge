@@ -84,8 +84,11 @@ component (valid three years from the date of distribution), see:
 
 Corresponding source of every GPL binary that ThinForge distributes
 is shipped in this release under `sources/`:
-  sources/partclone-0.3.33.tar.gz  — Partclone source
-  sources/ezio-snapshot.tar.gz     — EZIO source
+  sources/partclone-0.3.47.tar.gz  — Partclone source (current images)
+  sources/ezio-2.0.30.tar.gz       — EZIO source (current images)
+  sources/                         — plus the corresponding source for every
+                                     previously distributed version; see
+                                     sources/README.md for the mapping
 
 SHA-256 values are pinned in sources/README.md.
 

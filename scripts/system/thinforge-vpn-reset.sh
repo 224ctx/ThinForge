@@ -1,8 +1,8 @@
 #!/bin/bash
 # thinforge-vpn-reset.sh
 #
-# Bring a ThinForge client into a known-clean state for a fresh VPN-key
-# install. Removes every artefact that could pin the client to a stale
+# Remove the WireGuard-era (pre-NetBird) VPN artefacts from a ThinForge
+# client. Removes every artefact that could pin the client to a stale
 # WireGuard identity:
 #
 #   - Stops wg-quick@thinvpn so nothing holds /run/thinforge-wg open
@@ -13,10 +13,19 @@
 #   - Removes plaintext-mode artefacts on /data and the /etc symlink
 #   - daemon-reload so systemd forgets the dropin
 #
+# NetBird is NOT touched: the enrollment under /data/netbird, the netbird
+# unit and the agent's /data/thinforge/vpn-pending.json stay as they are.
+# Since the NetBird cutover the kernel link named `thinvpn` is NetBird's
+# WireGuard interface (the agent runs `netbird up --interface-name thinvpn`),
+# so the link is only torn down when it belongs to wg-quick — never under a
+# running netbird daemon. A fresh NetBird enrollment is a server-side action
+# ("VPN aktivieren" / re-enroll in ThinForge), not something this script
+# prepares.
+#
 # Idempotent: safe to re-run, no-op on clean clients.
 #
 # Exit codes:
-#   0  client is clean (whether something was removed or not)
+#   0  WireGuard-era artefacts are gone (whether something was removed or not)
 #   1  refused to touch foreign TPM content; pass --force to override
 #   2  a step failed (tpm2_evictcontrol error, unwritable filesystem, …)
 
@@ -44,21 +53,45 @@ fi
 
 TPM_HANDLE="0x81020001"
 WG_IFACE="thinvpn"
+# NetBird's persisted enrollment (agent-go: netbird.NetBirdStateDir); the
+# daemon keeps its profile in default.json (0.71+), older versions in
+# config.json.
+NETBIRD_STATE_DIR="/data/netbird"
 
 log() { printf '[vpn-reset] %s\n' "$*"; }
 
+# netbird_owns_link: is the thinvpn link the NetBird daemon's? True when the
+# daemon runs, or when a persisted enrollment exists (a stopped daemon comes
+# back with it — deleting the link would not stop that, only break it now).
+netbird_owns_link() {
+    if systemctl is-active --quiet netbird.service 2>/dev/null; then
+        return 0
+    fi
+    [ -e "$NETBIRD_STATE_DIR/default.json" ] || [ -e "$NETBIRD_STATE_DIR/config.json" ]
+}
+
 # ---------------------------------------------------------------------------
-# 1) Stop the tunnel — release tmpfs and any wg-quick post-up state
+# 1) Stop the wg-quick tunnel — release tmpfs and any wg-quick post-up state
 # ---------------------------------------------------------------------------
+WG_UNIT_WAS_ACTIVE=0
 if systemctl is-active --quiet "wg-quick@${WG_IFACE}.service" 2>/dev/null; then
+    WG_UNIT_WAS_ACTIVE=1
     log "stopping wg-quick@${WG_IFACE}"
     systemctl stop "wg-quick@${WG_IFACE}.service" || true
 fi
-# Belt-and-braces: tear down the interface even if the unit was already
-# stopped but the kernel-side link is still there (zombie state).
+# Belt-and-braces for a zombie link wg-quick left behind — but ONLY when the
+# link is wg-quick's. The very same name is NetBird's WireGuard interface
+# on every enrolled client; deleting it under the daemon cuts the live
+# tunnel, and nothing restarts it: the agent reconnects on the daemon's
+# status, not on the interface, and a `Connected` daemon with a missing
+# link stays that way until someone restarts netbird.
 if ip link show "$WG_IFACE" >/dev/null 2>&1; then
-    log "deleting leftover ${WG_IFACE} link"
-    ip link del "$WG_IFACE" 2>/dev/null || true
+    if [ "$WG_UNIT_WAS_ACTIVE" -eq 1 ] || ! netbird_owns_link; then
+        log "deleting leftover ${WG_IFACE} link"
+        ip link del "$WG_IFACE" 2>/dev/null || true
+    else
+        log "${WG_IFACE} link belongs to the NetBird daemon — left untouched"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -139,7 +172,7 @@ if [ -d /run/thinforge-wg ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 4) Remove plaintext-mode artefacts so the next install starts from zero
+# 4) Remove plaintext-mode artefacts so nothing of the old identity remains
 # ---------------------------------------------------------------------------
 PLAINTEXT_ARTEFACTS=(
     /data/wireguard/thinvpn.conf
@@ -165,7 +198,7 @@ fi
 # ---------------------------------------------------------------------------
 clean=1
 if command -v tpm2_getcap >/dev/null 2>&1 \
-   && [ -e /dev/tpm0 -o -e /dev/tpmrm0 ]; then
+   && { [ -e /dev/tpm0 ] || [ -e /dev/tpmrm0 ]; }; then
     if tpm2_getcap handles-persistent 2>/dev/null | grep -q "$TPM_HANDLE"; then
         log "post-reset: TPM slot $TPM_HANDLE still populated"
         clean=0
@@ -179,7 +212,11 @@ for f in "${TPM_ARTEFACTS[@]}" "${PLAINTEXT_ARTEFACTS[@]}"; do
 done
 
 if [ "$clean" -eq 1 ]; then
-    log "client is now in a clean VPN state — ready for fresh key install"
+    if netbird_owns_link; then
+        log "WireGuard-era VPN artefacts removed — the NetBird enrollment on this client is untouched"
+    else
+        log "WireGuard-era VPN artefacts removed — no NetBird enrollment on this client"
+    fi
     exit 0
 fi
 exit 2

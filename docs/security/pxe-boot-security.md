@@ -28,15 +28,19 @@ Angriffsvektoren.
 
 ## 1. Netzwerk-Isolation
 
-Das Management-Netzwerk laeuft auf einem dedizierten Host-Only Interface
-(Standard: `ens19`), das nicht ins Internet geroutet wird.
+Das Rollout-/Client-Netz laeuft auf einem dedizierten Host-Only Interface,
+das nicht ins Internet geroutet wird. Einen festen Standardnamen gibt es nicht —
+das Interface waehlt der Einrichtungsassistent.
 
-- **Interface**: Konfigurierbar in DHCP-Einstellungen — `interface`-Feld im JSON-`value` der `settings`-Zeile mit `key = 'dhcp_config'`
+- **Interface**: Konfigurierbar in DHCP-Einstellungen — `interface`-Feld im JSON-`value` der `settings`-Zeile mit `key = 'dhcp_config'`; beim Speichern muss es als physisches Interface auf dem Host existieren
 - **Subnetz**: Typisch `192.168.x.0/24` (aus DHCP-Range abgeleitet)
 - **Isolation**: Kein Routing zum Internet, nur Client-zu-Server-Kommunikation
 
-Alle Deployment-Dienste (DHCP, TFTP, NFS, Multicast, BitTorrent) sind an
-dieses Interface gebunden.
+DHCP und TFTP (dnsmasq, `interface=`), Multicast (`udp-sender --interface`)
+und der BitTorrent-Tracker (`opentracker -i <rollout_ip>`) sind an dieses
+Interface bzw. seine Adresse gebunden. Der NFS-Server und der EZIO-Seed-Port
+6881 laufen dagegen im Host-Netz und lauschen auf allen Interfaces — dort
+schuetzen die Export-IP-Liste (Abschnitt 4) bzw. der Torrent-Pfad (Abschnitt 5).
 
 ---
 
@@ -59,7 +63,7 @@ Pro Client wird eine Datei in `clients.d/` erstellt:
 
 ```
 # Dateiname: AA-BB-CC-DD-EE-FF
-aa:bb:cc:dd:ee:ff,192.168.100.10,set:known,hostname
+AA:BB:CC:DD:EE:FF,192.168.100.10,set:known,TF-AABBCCDDEEFF
 ```
 
 **Tags**:
@@ -69,7 +73,8 @@ aa:bb:cc:dd:ee:ff,192.168.100.10,set:known,hostname
 | `ipxe` | Client unterstuetzt iPXE (automatisch erkannt) |
 | `efi-x86_64` | Client ist UEFI (automatisch erkannt) |
 
-Alle registrierten Clients erhalten **immer** ein PXE-Boot-File. Die per-MAC
+Ohne reservierte Adresse (etwa im Proxy-DHCP-Modus) entfaellt der IP-Teil der
+Zeile. Alle registrierten Clients erhalten **immer** ein PXE-Boot-File. Die per-MAC
 PXE-Konfiguration bestimmt das Boot-Verhalten (lokale Festplatte oder Deployment).
 Dies funktioniert OS-agnostisch fuer Windows und Linux.
 
@@ -122,8 +127,8 @@ exportiert und auf die IPs der beteiligten Clients beschraenkt:
 
 **Lifecycle**:
 1. `deployment_orchestrator::activate_clients()` → `nfs_service::enable_deploy_share(client_ips)`
-2. Deployment abgeschlossen → `deployment_orchestrator::check_and_disable_nfs(docker, config, db)`
-3. NFS-Export wird entfernt
+2. Jeder `/done`-Rueckruf entfernt die IP genau dieses Clients (`nfs_service::remove_deploy_client_ip`)
+3. Deployment abgeschlossen → `deployment_orchestrator::check_and_disable_nfs(docker, config, db)` — der Export faellt weg, wenn kein weiteres Deployment laeuft
 
 Es wird strikt pro Client-IP (`assigned_ip`) exportiert. Sind keine Client-IPs
 bekannt, wird die Export-Zeile weggelassen und eine Warnung geloggt — es gibt
@@ -137,8 +142,8 @@ keinen Subnetz-weiten Fallback (F-HI-11).
 `/deploy-scripts/` (root `/srv/tftp`) ausgeliefert. Ein vorhersagbarer Pfad
 wuerde jedem im Netzwerk den Download ermoeglichen.
 
-**Loesung**: Pro Deployment wird ein zufaelliges `bt_secret` (32 Hex-Zeichen)
-generiert. Der Torrent-Pfad ist:
+**Loesung**: Pro Deployment wird ein zufaelliges `bt_secret` (128-Bit-Zufallswert,
+hexadezimal, bis zu 32 Zeichen) generiert. Der Torrent-Pfad ist:
 
 ```
 http://{server}/deploy-scripts/bt-{bt_secret}/{partition}.torrent
@@ -149,9 +154,12 @@ Statt:
 http://{server}/deploy-scripts/bt-{deployment_id_prefix}/{partition}.torrent
 ```
 
-Das Secret ist nur im PXE-Boot-Script enthalten, das per TFTP an registrierte
-Clients ausgeliefert wird. Nach dem Deployment werden die Torrent-Dateien
-geloescht (`bittorrent_service::cleanup_torrent_files()`).
+Das Secret steht im per-MAC-Deploy-Skript (`deploy-scripts/<mac>.sh`). Dieses
+Skript liegt im TFTP-Wurzelverzeichnis und ist dort — wie ueber Caddy:80 — ohne
+Zugangspruefung lesbar: wer im Rollout-Netz die MAC eines Geraets mit laufendem
+BitTorrent-Deployment kennt, liest auch den Pfad. Der Schutz wirkt also gegen
+Erraten, nicht gegen einen Mitleser im Rollout-Netz. Nach dem Deployment werden
+die Torrent-Dateien geloescht (`bittorrent_service::cleanup_torrent_files()`).
 
 ---
 
@@ -165,9 +173,14 @@ Wird vom Deploy-Script auf dem Client aufgerufen, sobald Clonezilla startet:
 POST /api/v1/clone-deployments/started?mac={mac}&token={callback_token}
 ```
 
-Der per-Deployment-Callback-Token wird validiert (403 bei Mismatch — F-CR-02).
+Der Callback-Token gilt je Deployment-Client und wird validiert (403 bei
+Mismatch — F-CR-02). Im Skript steht er nicht mehr: das Skript holt ihn beim
+Start ueber `GET /api/v1/clone-deployments/callback-token?mac={mac}`, und der
+Server gibt ihn nur an eine Absenderadresse heraus, die das Geraet sein kann
+(reservierte Adresse bzw. Rollout-Netz).
 
-**Sofortige Aktion**: Der Client-Status wird auf `deploying` gesetzt. PXE wird
+**Sofortige Aktion**: Der Client-Status wird auf `deploying` gesetzt und das
+Geraet fuer die Neubespielung zurueckgesetzt. PXE wird
 bei `/started` **nicht** auf Local-Boot zurueckgesetzt — das wuerde Deploy-Script
 und PXE-Config vorzeitig entfernen. Der Local-Boot-Reset erfolgt erst beim
 `/done`-Callback.
@@ -180,19 +193,27 @@ Wird nach Abschluss der Installation aufgerufen:
 POST /api/v1/clone-deployments/done?mac={mac}&status=success|failed&detail={detail}&token={callback_token}
 ```
 
-Der per-Deployment-Callback-Token wird validiert (403 bei Mismatch — F-CR-02).
+Der Callback-Token des Deployment-Clients wird validiert (403 bei Mismatch — F-CR-02).
 
-**Aktionen**:
+**Aktionen** (nur wenn zur MAC ein offener Deployment-Eintrag existiert; sonst
+wird der Aufruf ohne jede Aenderung quittiert):
 - Client-Status wird aktualisiert (done/failed)
-- PXE auf Local-Boot (immer, idempotente Selbstheilung — `/started` fuehrt keinen Reset durch)
-- Bei letztem Client: Deployment abgeschlossen, NFS-Export entfernt
-- BitTorrent: Seeder gestoppt, Torrent-Dateien geloescht
+- PXE auf Local-Boot (idempotente Selbstheilung — `/started` fuehrt keinen Reset durch)
+- NFS-Freigabe fuer die IP dieses Clients entfernt
+- Bei letztem Client: Deployment abgeschlossen, Sender bzw. Torrent gestoppt
+  (Torrent abgemeldet, Torrent-Dateien geloescht), NFS-Export entfernt, wenn
+  kein weiteres Deployment laeuft; der BitTorrent-Seeder stoppt, sobald kein
+  BT-Deployment mehr aktiv ist
 
-### Completion-Timeout
+### Completion-Timeout (entfallen)
 
-Wenn der Multicast-Sender fertig ist, aber ein Client keinen /done-Callback
-sendet (z.B. Neustart waehrend Transfer), wird der Client nach konfigurierbarem
-Timeout (Standard: 120 Sekunden) automatisch als fehlgeschlagen markiert.
+Einen Zeitablauf, der Clients ohne `/done`-Callback als fehlgeschlagen markiert,
+gibt es seit 2026-06-12 nicht mehr: ein Deployment gilt erst als abgeschlossen,
+wenn alle Clients fertig sind. Der Worker schliesst nur Deployments ab, deren
+Clients bereits alle einen Endstatus haben, deren letzter `/done`-Callback aber
+verloren ging (`check_deployment_deadlines`, alle 5 Minuten). Der Wert
+`completion_timeout` der Multicast-Einstellungen wird noch gespeichert, aber
+nicht ausgewertet.
 
 ---
 
@@ -232,7 +253,8 @@ Server (Seeder) ──Tracker──> Clients laden .torrent von HTTP
                                    (EZIO schreibt direkt auf /dev/sdX)
 ```
 
-- Nur EIN BT-Deployment gleichzeitig
+- Mehrere BT-Deployments teilen sich einen Seeder-Container (ein Torrent je
+  Deployment); der Seeder stoppt, wenn das letzte endet
 - Torrent-Pfad durch bt_secret geschuetzt
 - EZIO schreibt direkt auf Raw-Device (kein RAM/tmpfs noetig)
 - Clients seeden kurz nach Download fuer P2P-Verteilung
@@ -247,8 +269,8 @@ Server (Seeder) ──Tracker──> Clients laden .torrent von HTTP
 | PXE-Boot-Files | MAC-basierte Configs | Per-MAC PXE-Config (local/deploy) |
 | NFS Clones | IP-Beschraenkung | `enable_deploy_share(client_ips)` |
 | Multicast UDP | Subnetz-lokal | Host-Only Interface, 224.0.0.1 |
-| BitTorrent Seeder | Netzwerk-Isolation | Laeuft nur auf Host-Only Interface |
-| Torrent-Dateien | Zufaelliger Pfad | `bt_secret` (32 Hex-Zeichen) |
-| Callbacks | Per-Deployment-Token | `callback_token`-Validierung (403 bei Mismatch, F-CR-02) |
+| BitTorrent Seeder | Netzwerk-Isolation | Tracker an die Rollout-IP gebunden; der EZIO-Seed-Port 6881 lauscht auf allen Interfaces |
+| Torrent-Dateien | Zufaelliger Pfad | `bt_secret` (128 Bit) — steht im ohne Zugangspruefung lesbaren Deploy-Skript |
+| Callbacks | Token je Deployment-Client | `callback_token`-Validierung (403 bei Mismatch, F-CR-02); Herausgabe nur an die Geraeteadresse |
 | Double-Deploy | PXE-Selbstheilung bei /done | Idempotenter Localboot-Reset nach Abschluss |
-| Verwaiste Clients | Completion-Timeout | Auto-Fail nach Sender-Ende |
+| Verwaiste Deployments | Abgleich im Worker | Abschluss, sobald alle Clients einen Endstatus haben (kein Zeitablauf) |

@@ -10,8 +10,8 @@ The following components are **built into container images that ThinForge pushes
 
 | # | Component | Version | Where distributed | Source | Details |
 |---|-----------|---------|-------------------|--------|---------|
-| 1 | **Partclone** | 0.3.33 (Alpine community pkg) | images: `docker/cloner`, `docker/bt-seeder` | [`sources/partclone-0.3.33.tar.gz`](sources/partclone-0.3.33.tar.gz) | [`LICENSES/Partclone.md`](LICENSES/Partclone.md) |
-| 2 | **EZIO** | snapshot in `quellinfos/ezio/` | image: `docker/bt-seeder` | [`sources/ezio-snapshot.tar.gz`](sources/ezio-snapshot.tar.gz) | [`LICENSES/EZIO.md`](LICENSES/EZIO.md) |
+| 1 | **Partclone** | 0.3.47-r0 (Alpine community pkg) | images: `docker/cloner`, `docker/bt-seeder` | [`sources/partclone-0.3.47.tar.gz`](sources/partclone-0.3.47.tar.gz) | [`LICENSES/Partclone.md`](LICENSES/Partclone.md) |
+| 2 | **EZIO** | v2.0.30 (upstream release tag) | image: `docker/bt-seeder` | [`sources/ezio-2.0.30.tar.gz`](sources/ezio-2.0.30.tar.gz) | [`LICENSES/EZIO.md`](LICENSES/EZIO.md) |
 
 Canonical license texts: [`LICENSES/GPL-2.0.txt`](LICENSES/GPL-2.0.txt), [`LICENSES/GPL-3.0.txt`](LICENSES/GPL-3.0.txt).
 
@@ -63,7 +63,7 @@ ThinForge ships every GPL component unmodified. If that changes in any future re
 For every GPL v2 component **distributed by ThinForge** (Partclone, EZIO):
 
 1. **Shipped in every release:** [`sources/`](sources/) contains the exact corresponding source tarball with a pinned SHA-256 — see [`sources/README.md`](sources/README.md).
-2. **In the source repository:** EZIO additionally lives under `quellinfos/ezio/` (since it is built from there).
+2. **Not carried in the source repository:** EZIO is cloned from upstream at the pinned tag (`ARG EZIO_VERSION`) while the image is built — see [`LICENSES/EZIO.md`](LICENSES/EZIO.md). Partclone comes from the Alpine package. Neither tree lives in this repository; the tarballs in `sources/` are the shipped source.
 3. **From upstream:**
    - Partclone: https://github.com/Thomas-Tsai/partclone and https://gitlab.alpinelinux.org/alpine/aports/-/tree/master/community/partclone
    - EZIO: https://github.com/tjjh89017/ezio

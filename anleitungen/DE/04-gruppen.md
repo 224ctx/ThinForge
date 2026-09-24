@@ -6,7 +6,7 @@ Gruppen sind das primäre Organisations-Werkzeug für die Client-Flotte. Typisch
 - **Rolle** — Kasse, Schulung, Backoffice, Info-Kiosk
 - **Hardware-Generation** — unterschiedliche Image-Varianten für alte vs. neue Geräte
 - **Rollout-Wellen** — Pilot, Early Adopter, Breitband
-- **VPN-Anbindung** — Clients im lokalen LAN vs. Clients, die über WireGuard reinkommen (Außendienst, Home-Office, Außenstellen-Kioske). Unterschiedliche Bandbreiten-Charakteristik ist z. B. relevant bei der Deployment-Methode: Multicast nur im LAN, Unicast/BitTorrent für VPN-Clients.
+- **VPN-Anbindung** — Clients im lokalen LAN vs. Clients, die über das VPN reinkommen (Außendienst, Home-Office, Außenstellen-Kioske). Der VPN-Haken der Gruppe entscheidet, welche Geräte sich im Menü VPN aktivieren lassen ([13](13-vpn.md)); Clone-Deployments laufen nur im LAN, VPN-Clients erhalten Delta-Updates ([06](06-rollouts.md#rollouts-und-vpn)).
 
 Ein Client gehört zu **höchstens einer** Gruppe. Gruppen können geschachtelt sein (Elterngruppe / Untergruppe), was z. B. „Filiale A → Kassen" ermöglicht.
 
@@ -24,23 +24,23 @@ Filiale Nord (25)
 Filiale Süd (18)
 ```
 
-Jede Zeile zeigt Gruppenname, Anzahl direkt zugewiesener Clients, und eine kompakte Status-Leiste (online/offline/version).
+Jede Zeile zeigt Gruppenname, Anzahl direkt zugewiesener Clients und die Zahl der Untergruppen; die Verschachtelung zeigt der Einzug, beliebig tief. Der Stift am Zeilenende öffnet das Bearbeiten-Formular.
 
 ### Aktionen pro Gruppe
 
-- **Details anzeigen** — alle zugeordneten Clients, Tag-Filter, Durchschnitts-Version
-- **Rollout starten** — alle Clients dieser Gruppe erhalten ein Image
-- **Bearbeiten** — Namen, Beschreibung, Parent-Gruppe ändern
-- **Löschen** — Gruppe auflösen (Clients werden „ungruppiert")
+- **Details anzeigen** (Klick auf die Zeile) — Kennzahlen (Clients, übergeordnete Gruppe, Untergruppen), das jüngste Clone-Deployment dieser Gruppe mit Fortschritt und Knöpfen zum Abbrechen, Neustarten fehlgeschlagener Clients und Löschen, darunter die Tabelle **Enthaltene Clients** (Inventarnummer, Hostname, MAC-Adresse, Status, Raum; Klick öffnet das Gerät)
+- **Image verteilen** — einen eigenen Knopf dafür hat die Gruppenansicht nicht mehr. Ein Deployment für die Gruppe legst du unter **Cloning → Deployments** mit dem Ziel „Gruppe" an ([06](06-rollouts.md)); die Gruppenansicht zeigt es dann an.
+- **Bearbeiten** — Namen, Beschreibung, übergeordnete Gruppe ändern
+- **Löschen** (nur Admins, Knopf im Bearbeiten-Formular) — klappt nur, solange die Gruppe keine Untergruppen und keine Clients hat; sonst lehnt der Server mit einer Meldung ab. Hängen noch Aufgabenvorlagen oder hochgeladene Zertifikate an der Gruppe, fragt die Oberfläche, ob erzwungen gelöscht werden soll — die Vorlagen werden dann abgeschaltet, die Zertifikate gelöscht. Ist die Gruppe Ziel eines Rollouts im Entwurf, aktiv oder pausiert, lässt sie sich gar nicht löschen. Gruppen mit aktiviertem VPN löscht der Dialog nach eigener Rückfrage erzwungen: Untergruppen rücken eine Ebene hoch, Clients werden „ungruppiert".
 
 ## Neue Gruppe anlegen
 
-1. In der Gruppen-Übersicht auf **„+ Neue Gruppe"**
+1. In der Gruppen-Übersicht oben rechts auf **„+ Gruppe erstellen"**
 2. **Name** (eindeutig), **Beschreibung** (optional)
-3. **Parent-Gruppe** wählen — keine, wenn Top-Level. Eine bestehende Untergruppe lässt sich über **Bearbeiten** → Parent-Gruppe leeren → Speichern wieder auf Root-Ebene verschieben.
+3. **Übergeordnete Gruppe** wählen — keine, wenn Top-Level. Eine bestehende Untergruppe lässt sich über **Bearbeiten** → übergeordnete Gruppe leeren → Speichern wieder auf Root-Ebene verschieben.
 4. **Speichern**
 
-Die Gruppe ist leer. Clients fügst du über die Clients-Liste zu (Bulk-Aktion → Gruppe zuweisen) oder direkt aus dem Client-Detail-Tab.
+Die Gruppe ist leer. Clients fügst du über die Clients-Liste zu (Bulk-Aktion → Gruppe zuweisen) oder direkt in der Client-Detailansicht.
 
 ## Clients zuweisen
 
@@ -50,22 +50,24 @@ Zwei Wege:
 
 1. Menü → **Clients**
 2. Clients per Checkbox markieren (auch „alle auswählen" für gefilterte Ergebnisse)
-3. Aktionen oben → **„Gruppe zuweisen"**
-4. Gruppe wählen, bestätigen
+3. In der Leiste über der Tabelle im Feld **„Gruppe zuweisen"** die Gruppe wählen
+4. **Zuweisen**
 
-### Aus der Gruppe
+### Aus der Client-Detailansicht
 
-1. Menü → **Gruppen** → Gruppen-Detail
-2. **„Clients hinzufügen"** → Dialog mit verfügbaren (noch nicht zugewiesenen) Clients
-3. Auswählen, bestätigen
+1. Menü → **Clients** → Gerät anklicken
+2. Im Feld **Gruppen** die Gruppe wählen
+3. **Speichern**
+
+Beim Anlegen lässt sich die Gruppe gleich mitgeben — im Formular **„Client registrieren"** oder beim CSV-Import über die Spalte `gruppe_name` (fehlende Gruppen legt der Import auf Nachfrage an).
 
 ## Filter in anderen Ansichten
 
 Die Gruppen-Zuordnung ist überall filterbar:
 
-- **Clients-Liste** — Dropdown „Gruppe" oben rechts
-- **Rollouts** — Ziel-Auswahl: „Gruppe" statt Client-Liste
-- **Dashboard** — Compliance-Kachel lässt sich pro Gruppe aufschlüsseln
+- **Clients-Liste** — Dropdown „Gruppen" in der Filterzeile
+- **Deployments, Updates und Rollouts** — Ziel-Auswahl: Gruppe statt Client-Liste
+- **Berichte** — Spalte Gruppe im Compliance-Bericht, Auslastung und Verteilung pro Gruppe im Bericht „Nutzung"
 
 ## Unter-Gruppen
 

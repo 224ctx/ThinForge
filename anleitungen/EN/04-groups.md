@@ -6,7 +6,7 @@ Groups are the primary organisation tool for the client fleet. Typical reasons t
 - **Role** — POS, training, back office, info kiosk
 - **Hardware generation** — different image variants for old vs. new devices
 - **Rollout waves** — pilot, early adopter, broad rollout
-- **VPN reach** — clients on the local LAN vs. clients connecting via WireGuard (field service, home office, branch-office kiosks). Bandwidth characteristics differ and matter when choosing a deployment method: multicast is LAN-only, unicast/BitTorrent for VPN clients.
+- **VPN reach** — clients on the local LAN vs. clients connecting via the VPN (field service, home office, branch-office kiosks). The group's VPN flag decides which devices can be activated in the VPN menu; clone deployments run on the LAN only, VPN clients receive delta updates ([06](06-rollouts.md#rollouts-and-vpn)).
 
 A client belongs to **at most one** group. Groups can be nested (parent / child), which enables "Branch A → POS" for example.
 
@@ -24,23 +24,23 @@ Branch North (25)
 Branch South (18)
 ```
 
-Each row shows the group name, number of directly assigned clients, and a compact status bar (online/offline/version).
+Each row shows the group name, the number of directly assigned clients and the number of subgroups; nesting is shown by indentation, to any depth. The pencil at the end of the row opens the edit form.
 
 ### Per-group actions
 
-- **Show details** — all assigned clients, tag filter, average version
-- **Start rollout** — all clients of this group receive an image
+- **Show details** (click the row) — key figures (clients, parent group, subgroups), the group's most recent clone deployment with progress and buttons to cancel, restart failed clients and delete, and below it the **Contained Clients** table (inventory number, hostname, MAC address, status, room; clicking opens the device)
+- **Distribute an image** — the group view no longer has a button for this. Create a deployment for the group under **Cloning → Deployments** with the target "group" ([06](06-rollouts.md)); the group view then shows it.
 - **Edit** — rename, change description, move parent
-- **Delete** — dissolves the group (clients become "ungrouped")
+- **Delete** (admins only, button in the edit form) — only works while the group has no subgroups and no clients; otherwise the server refuses with a message. If task templates or uploaded certificates are still attached, the interface asks whether to force the deletion — the templates are then switched off and the certificates deleted. A group that is the target of a draft, active or paused rollout cannot be deleted at all. Groups with VPN enabled are force-deleted after their own confirmation: subgroups move up one level, clients become "ungrouped".
 
 ## Creating a new group
 
-1. In the groups overview click **"+ New group"**
+1. In the groups overview, top right, click **"+ Create Group"**
 2. **Name** (unique), **description** (optional)
 3. **Parent group** — none if top level. An existing subgroup can be promoted back to root level via **Edit** → clear the parent group → Save.
 4. **Save**
 
-The group is empty. Add clients via the clients list (bulk action → assign group) or directly from the client detail tab.
+The group is empty. Add clients via the clients list (bulk action → assign group) or directly in the client detail view.
 
 ## Assigning clients
 
@@ -50,22 +50,24 @@ Two ways:
 
 1. Menu → **Clients**
 2. Select clients via checkbox (also "select all" for filtered results)
-3. Actions at the top → **"Assign group"**
-4. Choose group, confirm
+3. In the bar above the table, pick the group in the **"Assign Group"** field
+4. **Apply**
 
-### From the group
+### From the client detail view
 
-1. Menu → **Groups** → Group detail
-2. **"Add clients"** → dialog with available (unassigned) clients
-3. Select, confirm
+1. Menu → **Clients** → click the device
+2. Pick the group in the **Groups** field
+3. **Save**
+
+The group can also be set when creating clients — in the **"Register Client"** form or during CSV import via the `gruppe_name` column (the import creates missing groups after asking).
 
 ## Filtering in other views
 
 The group assignment is filterable throughout:
 
-- **Clients list** — "Group" dropdown at the top right
-- **Rollouts** — target selection: "Group" instead of client list
-- **Dashboard** — the Compliance card can be broken down per group
+- **Clients list** — "Groups" dropdown in the filter row
+- **Deployments, updates and rollouts** — target selection: group instead of client list
+- **Reports** — group column in the compliance report, utilisation and distribution per group in the "Usage" report
 
 ## Sub-groups
 

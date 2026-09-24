@@ -109,14 +109,27 @@ fi
 # mdns_minimal [NOTFOUND=return] in /etc/nsswitch.conf verhindert dass
 # DNS-Lookups den konfigurierten Nameserver erreichen — Go, curl und
 # andere Programme die ueber libc aufloesen brechen bei NOTFOUND ab
-# bevor der DNS-Server gefragt wird. Fix: dns VOR mdns_minimal setzen.
+# bevor der DNS-Server gefragt wird. Fix: die Aktion [NOTFOUND=return]
+# hinter dem mDNS-Modul streichen, dann geht die Suche weiter zu dns.
+#
+# Beide Schreibweisen des Moduls: Debian (libnss-mdns) schreibt
+# mdns4_minimal, Arch/Manjaro mdns_minimal (mdns6_minimal gibt es auch),
+# Leerraum dazwischen beliebig. Bis 2026-09-15 kannte die Pruefung nur
+# `mdns_minimal` mit genau einem Leerzeichen: auf Debian lief die Reparatur
+# still ins Leere, und bei Tab oder doppeltem Leerzeichen machte das zweite,
+# nicht verankerte sed aus `mdns_minimal` zwei unbekannte Module
+# (`mmdns_minimal dns_minimal`). Die Nachpruefung meldet, wenn es nicht
+# gegriffen hat.
 
 NSSWITCH="/etc/nsswitch.conf"
-if [ -f "$NSSWITCH" ] && grep -q 'mdns_minimal.*\[NOTFOUND=return\].*dns' "$NSSWITCH"; then
-    # Move dns before mdns_minimal so the configured nameserver is queried first
-    sed -i '/^hosts:/ s/mdns_minimal \[NOTFOUND=return\] //' "$NSSWITCH"
-    sed -i '/^hosts:/ s/dns/mdns_minimal dns/' "$NSSWITCH"
-    log "NSSwitch repariert: dns vor mdns_minimal gesetzt"
+MDNS_NOTFOUND='^hosts:.*mdns[46]?_minimal[[:space:]]+\[NOTFOUND=return\]'
+if [ -f "$NSSWITCH" ] && grep -qE "$MDNS_NOTFOUND" "$NSSWITCH"; then
+    sed -i -E '/^hosts:/ s/(mdns[46]?_minimal)[[:space:]]+\[NOTFOUND=return\]/\1/g' "$NSSWITCH"
+    if grep -qE "$MDNS_NOTFOUND" "$NSSWITCH"; then
+        warn "NSSwitch: [NOTFOUND=return] hinter mdns_minimal nicht entfernt: $(grep '^hosts:' "$NSSWITCH")"
+    else
+        log "NSSwitch repariert: [NOTFOUND=return] hinter mdns_minimal entfernt, dns wird danach gefragt"
+    fi
 fi
 
 # ══════════════════════════════════════════════════════════════════════════

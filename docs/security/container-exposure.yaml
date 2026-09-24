@@ -1,87 +1,322 @@
 # ThinForge Container-Exposure-Overrides
 #
-# Diese Datei ergaenzt die aus docker-compose.yml abgeleiteten Defaults
-# fuer den VEX-Evaluator. Auto-Default-Regeln:
+# Diese Datei ergänzt die aus der Compose-Datei abgeleiteten Defaults für den
+# VEX-Evaluator (`exposure_classifier::load_exposure_map`). Auto-Default-Regeln:
 #   - ports:[...] oder network_mode:host → network=lan
 #   - network_mode:none → network=none
 #   - sonst → network=docker-internal
-#   - privileged/profiles werden direkt aus compose uebernommen
+#   - privileged/profiles werden direkt aus compose übernommen
 #
-# Overrides hier setzen, wenn die compose-Heuristik nicht der tatsaechlichen
-# Erreichbarkeit entspricht (z.B. cloner hat ports definiert, nimmt aber
-# keine eingehenden Verbindungen an).
+# Gilt für BEIDE Compose-Varianten: der Dev-Host mountet `docker-compose.yml`,
+# der Registry-/Release-Host `docker-compose.registry.yml` — beide landen im
+# Backend-Container als `/docker-compose.yml`. Die Service-Topologie (Namen,
+# ports, network_mode, privileged, profiles) ist in beiden Dateien identisch
+# bis auf eine Stelle: der Dev-Compose veroeffentlicht Redis auf
+# 127.0.0.1:6379, der Release-Compose gar nicht (siehe redis-Eintrag; der
+# Override setzt beide auf docker-internal). Sonst unterscheiden sie sich nur
+# in den `image:`-Refs (lokaler `build:` gegen
+# `git.thinforge.org/thinforge/thinforge-<svc>:${THINFORGE_TAG:-beta}`).
+# Eine einzige Override-Datei deckt deshalb beide Betriebsarten ab.
 #
-# Siehe docs/superpowers/specs/2026-04-21-cve-exposure-filter-design.md
+# Overrides hier setzen, wenn die compose-Heuristik nicht der tatsächlichen
+# Erreichbarkeit entspricht. Die Heuristik sieht nur "hat ports" — nicht die
+# Bind-IP, nicht den Caddy-Reverse-Proxy davor und nicht, ob im Container
+# überhaupt ein Listener läuft.
+#
+# Schema (`exposure_classifier::OverrideEntry`, `#[serde(deny_unknown_fields)]`):
+#   network: external | lan | docker-internal | none   (kebab-case)
+#   privileged: true|false
+#   profiles: [..]
+#   guest_escape_only: true|false
+#   notes: "..."
+# Ein Tippfehler in einem Feldnamen lässt den kompletten VEX-Layer ausfallen:
+# `parse_override_file` liefert dann `Err`, der Handler loggt "Exposure-Map
+# konnte nicht geladen werden" und jede CVE landet ungefiltert im Report.
+#
+# Overrides für Services, die es in der Compose-Datei nicht (mehr) gibt,
+# ignoriert `load_exposure_map` mit einer WARN-Zeile — toter Ballast, der
+# Drift zwischen Compose und Security-Doku verdeckt. Deshalb hier nicht
+# aufheben, sondern löschen.
+#
+# Letzter Abgleich gegen beide Compose-Dateien: 2026-09-16 (je 15 Services).
+#
+# Hintergrund: Design des CVE-Exposure-Filters vom 2026-04-21 und die
+# Architektur-Beschreibung des Schwachstellen-Scans (interne Doku).
 
 services:
-  cloner:
-    # Technisch im LAN-Netz, aber nur Outbound. Nimmt keine eingehenden
-    # Verbindungen an. QEMU/OVMF-CVEs betreffen nur Guest-VMs die wir selbst
-    # booten — kein Untrusted-Guest-Workflow.
-    network: none
-    guest_escape_only: true
-    notes: "Clone-Capture-Workflow, keine Listener, nur eigene Guests"
 
-  cloning-vm:
-    # noVNC/Redis-Proxy ist nur intern erreichbar (ueber Caddy reverse-proxy,
-    # nicht direkt), QEMU-Guest-Pfad analog zu cloner.
-    network: docker-internal
-    guest_escape_only: true
-    notes: "Browser-VM-Konsole via Caddy, QEMU-Guests sind getrusted"
-
-  bt-seeder:
-    # Technisch im LAN-Netz, aber explizit nur auf die Client-Netz-IP
-    # gebunden — nicht auf Management-Netz erreichbar.
-    # Setup-Wizard trennt client_network von management_network; die
-    # Bindung erfolgt auf pxe_server_ip() = dhcp_config.rollout_ip via:
-    #   - opentracker  -i $SERVER_IP   (entrypoint.sh)
-    #   - libtorrent   LISTEN_INTERFACES=<server_ip>:<seed_port>  (env)
-    network: lan
-    notes: "BitTorrent-Port nur auf Client-Netz-IP, nicht auf Mgmt-Netz"
-
-  multicast-sender:
-    # network_mode: host, aber kein Listening-Socket. udp-sender bindet
-    # nur als Egress an --interface $INTERFACE (aus dhcp_config.interface,
-    # Setup-Wizard-Client-NIC). Pakete gehen ausschliesslich auf der
-    # Client-NIC raus, Mgmt-Netz sieht sie nicht.
-    network: lan
-    notes: "Reiner UDP-Sender, --interface-bound, kein Listener"
+  # ===========================================================================
+  # external — über das NetBird-Overlay (wt0) von Remote-VPN-Peers erreichbar.
+  # Diese Stufe erzeugt die Heuristik nie, sie ist ausschliesslich Override.
+  # ===========================================================================
 
   caddy:
-    # Front-Tür. host-net, bindet zusätzlich vpn_ip:443 (NetBird-Overlay).
-    # Auf der VPN-Seite proxyt Caddy nur die Agent-Allowlist (render_vpn_api_block),
-    # keine UI/Admin-API. mgmt_ip:443 = UI + volle API, rollout_ip = Client-LAN.
+    # compose: network_mode: host, keine ports, profiles: [network] → Auto "lan".
+    # Front-Tür. Bindet drei :443-Blöcke (caddy_service.rs): mgmt_ip = UI + volle
+    # API, rollout_ip = Agent-Allowlist im Client-LAN, vpn_ip = Agent-Allowlist
+    # über das Overlay (render_vpn_api_block). Damit ist der Prozess selbst von
+    # Remote-VPN-Peers erreichbar → external statt lan.
     network: external
     notes: "vpn_ip:443 = Agent-Allowlist, mgmt_ip:443 = UI+API; VPN-segmentiert"
 
   backend:
-    # Loopback-gebunden (127.0.0.1:8000), via Caddy vpn_ip:443 nur für die
-    # Agent-Allowlist von Remote-Peers erreichbar (Admin-API/UI dort 404).
+    # compose: ports: ["127.0.0.1:8000:8000"] → Auto "lan".
+    # Der Port selbst ist loopback-gebunden, also nicht aus dem LAN erreichbar.
+    # Erreichbar wird das Backend erst durch Caddy — und dort auch über
+    # vpn_ip:443, wenn auch nur mit der Agent-Allowlist (UI/Admin-API laufen
+    # auf der VPN-Seite in den 404). Erreichbar von Remote-Peers = external.
     network: external
     notes: "Nur Agent-Allowlist über Overlay erreichbar (Caddy-segmentiert)"
 
   netbird:
-    # host-net, ThinVPN/NetBird-Overlay-Agent (wt0). Ausgehender Client zum
-    # ThinVPN-Server, kein Inbound-Listener.
+    # compose: network_mode: host, cap_add NET_ADMIN/SYS_ADMIN/SYS_RESOURCE,
+    # devices /dev/net/tun, profiles: [network] → Auto "lan".
+    # Overlay-Agent (wt0). Ausgehender Client zur VPN-Instanz, kein
+    # Inbound-Listener — sitzt aber direkt am Overlay-Interface.
     network: external
-    notes: "Overlay-Agent (wt0); outbound zum ThinVPN-Server, kein Inbound"
+    notes: "Overlay-Agent (wt0); outbound zur VPN-Instanz, kein Inbound"
 
   dnsmasq:
-    # Split-DNS für VPN-Clients (NetBird-Nameserver-Group).
+    # compose: network_mode: host, cap_add NET_ADMIN, profiles: [network]
+    # → Auto "lan". Split-DNS für Remote-VPN-Peers (NetBird-Nameserver-Group)
+    # plus DHCP/PXE im Client-LAN; der Resolver ist über wt0 ansprechbar.
+    #
+    # Der TFTP-Server (udp/69, tftp-root=/var/lib/tftpboot) hat KEINE
+    # Zugangsprüfung — das Protokoll kennt keine, und `dhcp-ignore=tag:!known`
+    # filtert nur DHCP. Alles unter diesem Verzeichnis ist damit für das ganze
+    # Rollout-Netz lesbar, und Caddy liefert dieselben Dateien zusätzlich über
+    # <rollout_ip>:80 aus. Es darf dort deshalb nichts liegen, was ein
+    # Geheimnis ist. Seit 2026-09-05 steht der Rückruf-Token der
+    # Klon-Deployments und Aufnahme-Jobs nicht mehr in den per-MAC-Skripten
+    # unter deploy-scripts/, sondern wird von dort zur Laufzeit über einen
+    # IP-geprüften Endpunkt geholt (`…/callback-token`).
     network: external
-    notes: "DNS für Remote-VPN-Peers über Overlay"
+    notes: "DNS für Remote-VPN-Peers über Overlay (zusätzlich DHCP/PXE im Client-LAN); TFTP-Root ohne Zugangsprüfung → keine Geheimnisse dort"
+
+  # ===========================================================================
+  # lan — Listener im Client-/Management-LAN, aber nicht über das Overlay.
+  # ===========================================================================
 
   chrony:
-    # NTP für VPN-Clients.
-    network: external
-    notes: "NTP für Remote-VPN-Peers über Overlay"
+    # compose: network_mode: host, cap_add SYS_TIME, profiles: [network]
+    # → Auto "lan", und das ist korrekt.
+    #
+    # KORREKTUR 2026-08-25: stand zuvor auf "external" mit der Begründung
+    # "NTP-Dienst, den auch Remote-VPN-Peers abfragen". Das ist nachweislich
+    # falsch — chrony bedient ausschliesslich das Client-LAN:
+    #
+    #   1. `chrony_service::write_ntp_conf()` schreibt bei gesetzter
+    #      rollout_ip genau zwei Zeilen Zugriffssteuerung:
+    #        deny all
+    #        allow <rollout_ip>/<cidr>
+    #      Auf einem eingerichteten Server (thinforge.conf unter
+    #      ${STORAGE_DIR}/chrony/) also z. B.:
+    #        deny all
+    #        allow <rollout_ip>/<cidr>
+    #      Die Overlay-Adresse des Servers liegt im NetBird-Netz
+    #      100.64.0.0/10 — nicht im erlaubten Netz, also abgewiesen.
+    #   2. Kein Codepfad bietet chrony den VPN-Peers ueberhaupt an. NTP geht
+    #      nur per DHCP-Option 42 raus (`dhcp-option=42,<NTP-Server>`), und
+    #      DHCP laeuft ausschliesslich im Client-LAN — ueber wt0 verteilt
+    #      NetBird die Adressen selbst.
+    #   3. Der Unterschied zu dnsmasq ist real und kein Zufall: dnsmasq traegt
+    #      `interface=wt0` in seiner dhcp-settings.conf, chrony hat kein
+    #      Gegenstueck dazu.
+    #
+    # ACHTUNG — die Einstufung haengt an der rollout_ip: ist sie NICHT gesetzt,
+    # schreibt write_ntp_conf statt `deny all` ein `allow all`, und dann
+    # antwortet chrony jedem, der ihn erreicht. Auf einem eingerichteten System
+    # ist das nicht der Fall. Vor dem Setup-Wizard (noch keine
+    # Backend-Konfiguration) greift der Entrypoint-Default, und der ist seit
+    # 2026-09-15 `deny all` ohne `allow`: Port 123 bleibt zu (vorher `allow
+    # all` auf 0.0.0.0:123, Review 2026-09-02 S2-2).
+    #
+    # Ehrlichkeitshalber: der UDP-Socket liegt wegen network_mode: host auf
+    # 0.0.0.0:123 (verifiziert per `ss -ulnp`, es gibt keine bindaddress-
+    # Direktive). Pakete von VPN-Peers ERREICHEN chronyd also und werden
+    # geparst, bevor die Zugriffssteuerung sie abweist — eine Pre-Auth-Luecke
+    # im Paket-Parser waere von dort erreichbar. Fuer die VEX-Matrix ist das
+    # ohne Folge: `classify()` behandelt External und Lan identisch
+    # (exposure_classifier.rs:355/361), die Umstufung aendert kein einziges
+    # CVE-Verdict und korrigiert nur das Label.
+    network: lan
+    notes: "NTP nur fuer das Client-LAN (deny all + allow <rollout>/<cidr>); kein Overlay-Dienst"
 
-  # Alle anderen Services nutzen compose-Defaults:
-  #   worker                   → docker-internal (keine ports)
-  #   postgres, redis          → docker-internal (keine ports)
-  #   frontend                 → lan (127.0.0.1:3000-ports); Admin-UI nur mgmt-seitig
-  #   guacd, semaphore         → compose-default (mgmt-only, NICHT external)
-  #   nfs-server, multicast-sender, bt-seeder → lan
-  #                              (Client-LAN-Imaging/PXE, nicht über das Overlay)
-  # External (über NetBird-Overlay erreichbar) = caddy, backend, netbird,
-  #   dnsmasq, chrony — siehe Overrides oben.
+  cloning-vm:
+    # compose: network_mode: host, privileged: true, profiles: [testing]
+    # → Auto "lan". Die Stufe bleibt "lan", weil der Container im Host-Netz
+    # laufen MUSS; erreichbar ist von dort aber nichts mehr direkt.
+    #
+    # VORGESCHICHTE (2026-08-25, in zwei Schritten): der Eintrag stand lange
+    # auf "docker-internal" mit der Begründung, die Konsole sei nur über Caddy
+    # erreichbar. Das war zu dem Zeitpunkt falsch —
+    # docker/cloning-vm/entrypoint.sh startete
+    #   websockify --web /usr/share/novnc/ 6081 localhost:5901
+    # ohne Bind-Adresse (= 0.0.0.0), QEMU dazu mit `-vnc ":1"` (QEMU-Default ist
+    # ebenfalls jedes Interface). Unter network_mode: host lagen damit eine
+    # passwortlose noVNC-Konsole und der rohe VNC-Port einer PRIVILEGIERTEN VM
+    # auf allen Host-Interfaces. Damit war zugleich `guest_escape_only: true`
+    # nicht mehr haltbar: exposure_classifier::classify() wertet dieses Flag VOR
+    # jeder Netz-Betrachtung aus und hätte alle 119 CVEs des Images (3 Critical,
+    # 57 High, darunter websockify/Python/OpenSSL mit AV:N) zu not_affected
+    # erklärt — also genau die Pakete, die den offenen Listener bilden.
+    #
+    # Auflösung: der Listener ist geschlossen worden, statt die Unterdrückung
+    # stehen zu lassen. entrypoint.sh bindet jetzt
+    #   websockify … 127.0.0.1:6081 …   und   -vnc "127.0.0.1:1"
+    # Der einzige Weg von außen ist wieder Caddy (`handle_path /novnc/*` →
+    # reverse_proxy 127.0.0.1:6081, caddy_service.rs), und der kommt über das
+    # Loopback.
+    #
+    # NACHTRAG (2026-09-05): die Aufzählung war unvollständig — es gibt einen
+    # DRITTEN Listener. QEMUs SSH-Weiterleitung stand als
+    #   -netdev "user,id=net0,hostfwd=tcp::2222-:22"
+    # ohne Host-Adresse, also ebenfalls auf 0.0.0.0. Unter network_mode: host
+    # hing damit während jeder Cloning-Sitzung der sshd der Gold-VM im LAN —
+    # in der Installationsphase noch mit den Zugangsdaten des Installers,
+    # bevor inject-agent.sh den sshd härtet, und dazu QEMUs slirp-Stack
+    # präauthentisch. Auch das hätte guest_escape_only ausgehebelt (dieselben
+    # 119 CVEs, u. a. QEMU/OpenSSL mit AV:N). Behoben nach demselben Muster:
+    #   -netdev "user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22"
+    # Operator-Zugriff läuft über das Loopback des Servers
+    # (auf dem Server selbst `ssh -p 2222 root@127.0.0.1`, von aussen per
+    # SSH-Tunnel `ssh -L 2222:127.0.0.1:2222 <server>`).
+    #
+    # Damit trägt guest_escape_only wieder: übrig bleibt der QEMU/OVMF-Guest-
+    # Pfad, und die Guests booten wir selbst (wie bei cloner).
+    #
+    # ACHTUNG: Diese Einstufung hängt an ALLEN DREI Bind-Adressen in
+    # entrypoint.sh:
+    #   1. websockify … 127.0.0.1:6081 …          (noVNC-Konsole)
+    #   2. -vnc "127.0.0.1:1"                     (roher VNC-Port 5901)
+    #   3. hostfwd=tcp:127.0.0.1:2222-:22         (SSH in den Gast)
+    # Fällt eine davon weg, ist guest_escape_only hier falsch und muss
+    # gestrichen werden.
+    network: lan
+    guest_escape_only: true
+    notes: "noVNC 6081 + VNC 5901 + QEMU-SSH-Forward 2222 alle loopback-gebunden, extern nur via Caddy /novnc/*; QEMU-Guests sind getrusted"
+
+  bt-seeder:
+    # compose: network_mode: host, profiles: [bittorrent] → Auto "lan".
+    # Override hält die Stufe fest — begründet aber NICHT mehr mit einer
+    # Bindung, die es nicht gibt. Die beiden Listener verhalten sich
+    # unterschiedlich:
+    #   - opentracker: wirklich an die Client-Netz-IP gebunden
+    #     (`opentracker -i "$SERVER_IP"`, entrypoint.sh; SERVER_IP =
+    #     pxe_server_ip() = dhcp_config.rollout_ip).
+    #   - libtorrent (EZIO-Peer-Port 6881/tcp+udp): NICHT gebunden. Das
+    #     Backend setzt zwar `LISTEN_INTERFACES=<server_ip>:<seed_port>`
+    #     (bittorrent_service.rs), das ausgelieferte EZIO liest die Variable
+    #     aber nie: der Dockerfile klont upstream ungepatcht
+    #     (`git clone --depth 1 --branch "${EZIO_VERSION}"` … "ThinForge
+    #     aendert am EZIO-Quelltext nichts"), und der Override existiert nur
+    #     in einem ThinForge-lokalen main.cpp-Patch, der in keinem
+    #     ausgelieferten Binary steckt (sources/README.md, LICENSES/EZIO.md).
+    #     Ohne `listen_interfaces` bindet libtorrent auf ALLEN Interfaces —
+    #     so beschreibt es auch die Doku der Klon-Pipeline. Während eines
+    #     Rollouts ist der Peer-Port also auch auf dem Management-Netz und
+    #     auf wt0 erreichbar.
+    # `lan` ist deshalb keine Abschwächung, sondern bereits die härteste
+    # Stufe, die der Evaluator unterscheidet: exposure_classifier::classify
+    # behandelt `Lan` und `External` identisch (Network-AV → affected,
+    # Adjacent-AV → affected); unterdrückt wird erst ab `docker-internal`.
+    # An dieser Einstufung hängt also KEINE Filterung netzreichbarer CVEs für
+    # den Seeder — sie zählen alle als betroffen.
+    network: lan
+    notes: "Tracker an Client-Netz-IP gebunden; EZIO-Peer-Port 6881 bindet mangels LISTEN_INTERFACES-Unterstuetzung auf allen Interfaces (nur waehrend Rollouts). Netz-CVEs zaehlen als betroffen."
+
+  multicast-sender:
+    # compose: network_mode: host, profiles: [multicast] → Auto "lan".
+    # Override hält die Stufe fest: host-Netz, aber kein Listening-Socket.
+    # udp-sender bindet nur als Egress an --interface $INTERFACE (aus
+    # dhcp_config.interface, Setup-Wizard-Client-NIC). Pakete gehen
+    # ausschliesslich auf der Client-NIC raus, das Mgmt-Netz sieht sie nicht.
+    network: lan
+    notes: "Reiner UDP-Sender, --interface-bound, kein Listener"
+
+  # ===========================================================================
+  # docker-internal — nur aus dem Compose-Netz bzw. vom Host-Loopback aus
+  # erreichbar. Der Host selbst gilt im Threat-Model als vertrauenswürdig
+  # (LAN-only Deployment: Angreifer sitzt im LAN, nicht auf dem Server).
+  # ===========================================================================
+
+  postgres:
+    # compose: ports: ["127.0.0.1:5432:5432"] → Auto "lan", weil die Heuristik
+    # nur zählt, DASS ports gesetzt sind. Die Bindung ist aber loopback-only:
+    # aus dem LAN ist 5432 nicht erreichbar, nur Backend/Worker über das
+    # Compose-Netz und Admin-Werkzeuge auf dem Host selbst.
+    # ACHTUNG: Diese Einstufung hängt an der Bind-IP. Wird die Zeile jemals auf
+    # "5432:5432" (= 0.0.0.0) geändert, ist dieser Override falsch und muss auf
+    # lan zurück — die Heuristik würde es allein nicht mehr auffangen.
+    network: docker-internal
+    notes: "5432 nur auf 127.0.0.1 gemappt — kein LAN-Listener"
+
+  redis:
+    # Dev-Compose: ports: ["127.0.0.1:6379:6379"] → Auto "lan" (fuer
+    # cargo-Tests und redis-cli). Release-Compose (docker-compose.registry.yml):
+    # KEIN veroeffentlichter Port mehr. Nutzer sind ausschliesslich Backend und
+    # Worker über das Compose-Netz.
+    # Seit 2026-09-11 (Review S5-1) verlangt Redis ein Passwort (`--requirepass`
+    # aus REDIS_PASSWORD): das Host-Loopback teilen sich acht
+    # network_mode:host-Dienste, ohne Auth haette jeder von ihnen Auftraege in
+    # die Worker-Liste schreiben koennen. Auth ist damit die tragende Grenze,
+    # nicht mehr allein die Bind-IP.
+    network: docker-internal
+    notes: "Dev: 6379 nur auf 127.0.0.1; Release: kein Port. Zugriff nur mit Passwort (requirepass)"
+
+  # ===========================================================================
+  # none — kein Listener, kein veröffentlichter Port.
+  # ===========================================================================
+
+  cloner:
+    # compose: keine ports, kein network_mode, privileged: true,
+    # profiles: [cloner] → Auto "docker-internal".
+    # Der Compose-Eintrag ist reines Build-/UI-Template (command: echo …); die
+    # echten Läufe startet das Backend on-demand per `docker run --privileged`
+    # ohne --network-Angabe und ohne -p, also am Default-Bridge mit reinem
+    # Outbound. In keiner der beiden Betriebsarten lauscht im Container ein
+    # Socket → none statt docker-internal.
+    # QEMU/OVMF-CVEs betreffen nur Guest-VMs, die wir selbst booten — kein
+    # Untrusted-Guest-Workflow, deshalb guest_escape_only.
+    network: none
+    guest_escape_only: true
+    notes: "Clone-Capture-Workflow, keine Listener und keine veröffentlichten Ports, nur eigene Guests"
+
+  # ===========================================================================
+  # Ohne Override — der Compose-Default trifft die Realität bereits:
+  #
+  #   worker      → docker-internal
+  #                 keine ports, kein network_mode; spricht nur Postgres,
+  #                 Redis und den Docker-Socket an.
+  #   guacd       → docker-internal
+  #                 keine ports, profiles: [network]; 4822 ist nur über den
+  #                 Compose-DNS-Namen "guacd" erreichbar, und nur das Backend
+  #                 verbindet sich dorthin.
+  #   frontend    → lan
+  #                 ports: ["127.0.0.1:3000:3000"] — der Port selbst ist
+  #                 loopback-gebunden, aber Caddy proxyt den Catch-all-`handle`
+  #                 des mgmt_ip:443-Blocks auf 127.0.0.1:3000. Die UI ist damit
+  #                 aus dem Management-LAN erreichbar, jedoch NICHT über das
+  #                 Overlay (auf vpn_ip:443 liefert Caddy nur die
+  #                 Agent-Allowlist) → lan, nicht external.
+  #   nfs-server  → lan
+  #                 network_mode: host, privileged: true, profiles: [network];
+  #                 exportiert clones und captures per NFS ins Client-LAN
+  #                 (PXE-/Imaging-Pfad); deltas ist nur noch eingebunden,
+  #                 der Export entfiel 2026-05-07 (Auslieferung per HTTPS).
+  #
+  # Nicht in dieser Datei, weil in beiden Compose-Dateien auskommentiert bzw.
+  # entfernt: prometheus, grafana, semaphore (seit 2026-04-20 ausgebaut).
+  # Ein Override dafür wäre toter
+  # Ballast — load_exposure_map würde ihn ohnehin nur mit einer WARN-Zeile
+  # verwerfen.
+  #
+  # Zusammenfassung der Stufen:
+  #   external        = caddy, backend, netbird, dnsmasq
+  #                     (chrony stand hier bis 2026-08-25 — er bedient nur das
+  #                      Client-LAN, siehe die Begründung an seinem Eintrag)
+  #   lan             = chrony, cloning-vm, bt-seeder, multicast-sender,
+  #                     frontend, nfs-server
+  #   docker-internal = postgres, redis, worker, guacd
+  #   none            = cloner
+  # ===========================================================================

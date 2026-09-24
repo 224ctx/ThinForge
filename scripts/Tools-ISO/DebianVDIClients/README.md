@@ -7,8 +7,10 @@ auf die Tools-ISO gebaut und beim Client-Setup von hier installiert.
 
 ## Ablauf
 
-1. **Pakete in diesen Ordner legen** — entweder manuell von der Hersteller-Seite
-   herunterladen, oder auf dem Build-Host:
+1. **Pakete bereitstellen** — in der Oberfläche unter *Cloning → VDI-Clients* je
+   Client hochladen (der Server spielt sie beim nächsten Bau der Tools-ISO in
+   `DebianVDIClients/` ein), oder in diesen Ordner legen — entweder manuell von
+   der Hersteller-Seite herunterladen, oder auf dem Build-Host:
    ```
    cp DebianVDIClients/urls.conf.example DebianVDIClients/urls.conf   # URLs eintragen
    bash DebianVDIClients/install-vdi-clients-debian.sh download
@@ -16,9 +18,10 @@ auf die Tools-ISO gebaut und beim Client-Setup von hier installiert.
 2. **Tools-ISO bauen** — die Pakete liegen dann unter `DebianVDIClients/` auf der ISO.
 3. **Auf dem Client installieren** (als root):
    ```
-   sudo bash /media/cdrom0/DebianVDIClients/install-vdi-clients-debian.sh
+   sudo mkdir -p /mnt/tools && sudo mount /dev/sr1 /mnt/tools   # Tools-ISO = zweites CD-ROM
+   sudo bash /mnt/tools/DebianVDIClients/install-vdi-clients-debian.sh
    ```
-   (oder den Aufruf aus `install-debian-minimal.sh finish` heraus ergänzen).
+   (`install-debian-minimal.sh finish` bietet diese Installation am Ende selbst an).
 
 ## Erkannte Dateinamen / Bezugsquellen
 

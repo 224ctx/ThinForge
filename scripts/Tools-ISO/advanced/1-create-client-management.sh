@@ -7,7 +7,9 @@
 #
 # Die Tools-ISO ist die kanonische Provisioning-Quelle und enthält alle
 # benötigten Dateien (provisioning_key.pub, server_url, heartbeat_token,
-# server.crt, signing-pubkey, agent-binary, alle Apply-Skripte). Der frühere
+# server.crt, signing-pubkey, agent-binary samt minisign-Signatur, alle
+# Apply-Skripte). Das Agent-Binary wird vor dem Kopieren gegen den
+# Signierschlüssel des Servers geprüft (Schritt 5). Der frühere
 # curl|bash-Bootstrap-Modus über die öffentliche API wurde entfernt — er
 # leakte das geteilte Heartbeat-Token und das Trust-Anchor-Material an
 # jeden LAN-Host. Siehe docs/security/security-audit-2026-04-18.md F-CR-01 + F-CR-05.
@@ -67,6 +69,62 @@ get_file() {
   fi
   # Datei fehlt in der ISO — Aufrufer muss damit umgehen (z.B. WARNUNG/exit).
   return 1
+}
+
+# ── Hilfsfunktion: minisign bereitstellen ────────────────────────────
+# Die Installer (install-*.sh) bringen minisign schon mit; dieses Skript ist
+# aber auch als Einzelaufruf dokumentiert. Ohne minisign liesse sich weder
+# das Agent-Binary hier pruefen noch spaeter ein Update oder Delta — der
+# Agent ruft dafuer selbst `minisign -V`.
+
+ensure_minisign() {
+  command -v minisign >/dev/null 2>&1 && return 0
+  echo "[setup] Installing minisign..."
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y -qq minisign
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q minisign
+  elif command -v pacman >/dev/null 2>&1; then
+    pacman -Sy --noconfirm minisign
+  fi
+  command -v minisign >/dev/null 2>&1
+}
+
+# ── Hilfsfunktion: Signatur des Agent-Binarys pruefen ────────────────
+# verify_agent_signature BINARY SIGNATUR PUBKEY-DATEI
+#
+# Befund D14 (Review 2026-09-02): Bis 2026-09-14 kopierte Schritt 5 das
+# Binary ungeprueft. Die ISO konnte dabei ein eingechecktes, veraltetes und
+# unsigniertes Binary tragen, das so auf das Golden Image und jeden Klon kam.
+# Geprueft wird gegen dieselbe Schluesseldatei, der der Agent spaeter bei
+# jedem Update vertraut. Den Schluessel liest die Funktion wie der Go-Agent
+# (minisign.ReadPubKeyLine): erste nicht leere Zeile ohne
+# "untrusted comment:" — das vertraegt auch eine einzeilige Datei.
+
+verify_agent_signature() {
+  local binary="$1" signature="$2" pubkey_file="$3" pubkey
+  if [ ! -s "${signature}" ]; then
+    echo "[setup] ERROR: $(basename "${signature}") is missing from the Tools-ISO — the agent binary cannot be verified."
+    return 1
+  fi
+  if [ ! -s "${pubkey_file}" ]; then
+    echo "[setup] ERROR: signing key ${pubkey_file} is missing — the agent binary cannot be verified."
+    return 1
+  fi
+  pubkey=$(grep -v '^untrusted comment:' "${pubkey_file}" | grep -m1 -E '[^[:space:]]' | tr -d '[:space:]' || true)
+  if [ -z "${pubkey}" ]; then
+    echo "[setup] ERROR: no public key found in ${pubkey_file} — the agent binary cannot be verified."
+    return 1
+  fi
+  if ! ensure_minisign; then
+    echo "[setup] ERROR: minisign is not installed and could not be installed — the agent binary cannot be verified."
+    return 1
+  fi
+  if ! minisign -V -P "${pubkey}" -m "${binary}" -x "${signature}"; then
+    echo "[setup] ERROR: signature check of the agent binary FAILED — it does not match its signature or this server's signing key."
+    return 1
+  fi
+  echo "[setup] Agent binary signature verified"
 }
 
 # ── 1. SSH-Key des Servers installieren ──────────────────────────────
@@ -219,7 +277,8 @@ fi
 
 # ── 5. ThinForge Agent installieren ──────────────────────────────────
 #
-# Bevorzugt das Go-Binary (thinforge-agent), faellt auf Python zurueck.
+# Das Go-Binary (thinforge-agent) von der ISO — nur nach bestandener
+# Signaturpruefung gegen /data/thinforge/signing.pub (Schritt 4b).
 
 echo "[setup] Installing ThinForge agent..."
 
@@ -237,6 +296,14 @@ AGENT_INSTALLED=false
 # Skript meldete aber faelschlich Erfolg, weil cp's exit-Code nicht
 # geprueft wurde und das nachgelagerte chmod nur die ctime updated.
 if [ -f "${SCRIPT_DIR}/thinforge-agent" ]; then
+  # Vor dem Kopieren: ein Binary, dessen Signatur nicht passt, kommt nicht
+  # auf das System (auch nicht als .new).
+  if ! verify_agent_signature "${SCRIPT_DIR}/thinforge-agent" \
+       "${SCRIPT_DIR}/thinforge-agent.minisig" /data/thinforge/signing.pub; then
+    echo "[setup] Refusing to install the agent. Build and sign it on the server"
+    echo "[setup] (Clients → Agent), rebuild the Tools-ISO and run this script again."
+    exit 1
+  fi
   if ! cp "${SCRIPT_DIR}/thinforge-agent" /data/thinforge/thinforge-agent.new; then
     echo "[setup] ERROR: could not copy agent binary from ISO to /data/thinforge/thinforge-agent.new"
     exit 1
@@ -261,7 +328,8 @@ if [ -f "${SCRIPT_DIR}/thinforge-agent" ]; then
 fi
 
 if [ "$AGENT_INSTALLED" = false ]; then
-  echo "[setup] ERROR: thinforge-agent is missing from the Tools-ISO. Rebuild the Tools-ISO."
+  echo "[setup] ERROR: thinforge-agent is missing from the Tools-ISO."
+  echo "[setup] Build and sign the agent on the server (Clients → Agent), then rebuild the Tools-ISO."
   exit 1
 else
   cat > /data/thinforge/agent.conf <<AGENTCONF

@@ -52,8 +52,15 @@ It does **not** cover Clonezilla Live (customer downloads from SourceForge direc
 
 Source code is already distributed with every release of ThinForge:
 
-- Partclone: `sources/partclone-0.3.33.tar.gz` (pinned SHA-256 in [`sources/README.md`](sources/README.md))
-- EZIO: `sources/ezio-snapshot.tar.gz` (pinned SHA-256 in [`sources/README.md`](sources/README.md))
+- Partclone: `sources/partclone-0.3.47.tar.gz` (pinned SHA-256 in [`sources/README.md`](sources/README.md))
+- EZIO: `sources/ezio-2.0.30.tar.gz` (pinned SHA-256 in [`sources/README.md`](sources/README.md))
+
+For earlier releases the corresponding source is also in `sources/`:
+`partclone-0.3.40-r0-alpine3.23.tar.gz` (releases v2026.07.19 – v2026.07.21) and
+`ezio-v2.0.23-11-g4414248.tar.gz` (every EZIO-bearing image before 2026-08-25).
+[`sources/README.md`](sources/README.md) maps each file to the releases it
+belongs to. This offer covers whichever of them matches the release you
+received.
 
 It is also available from the authoritative upstream projects listed in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md). You do not need to invoke this written offer if those channels meet your needs.
 

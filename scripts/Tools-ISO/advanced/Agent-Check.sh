@@ -108,19 +108,32 @@ if [ -x /data/thinforge/thinforge-agent ]; then
     else
         bad "thinforge-agent is NOT an ELF binary (likely corrupted)"
     fi
-    # Embedded Agent-Version: Go-Agent loggt beim Start
-    # `version=vX.Y.Z` als strukturiertes Feld. Wir starten ihn mit
-    # Timeout, parsen die Zeile, killen ihn wieder. HOME=/dev/null
-    # stoppt den Agenten frueh genug bevor er Files in /data/thinforge
-    # schreibt.
-    agent_ver=$(timeout 2 /data/thinforge/thinforge-agent 2>&1 \
-                  | grep -oE 'version=v[^ ]+' \
+    # Embedded Agent-Version aus dem Binary LESEN, nicht den Agenten starten.
+    #
+    # Frueher stand hier `timeout 2 /data/thinforge/thinforge-agent` — ohne
+    # Argument ist das der normale Daemon-Einstiegspunkt, als root und mit dem
+    # echten Zustandsverzeichnis. In diesen zwei Sekunden laufen bereits die
+    # Selbstaktualisierung (laedt ein neues Binary und ersetzt das
+    # vorhandene), der Abgleich der vertrauenswuerdigen Dateien und der
+    # Provisionierungs-Skripte (fuehrt geaenderte Skripte als root aus, mit
+    # eigenem 300-s-Timeout, das das SIGTERM des `timeout` ueberlebt), die
+    # Snapshot-Bereinigung und das Loeschen der Lizenz-Zustandsdatei — auf
+    # genau der Gold-VM, die gleich geklont wird. Der Kommentar behauptete
+    # einen HOME=/dev/null-Riegel, der in der Befehlszeile nie stand, und
+    # niemand sah mehr nach.
+    #
+    # Einen `version`-Unterbefehl hat der Agent nicht, also lesen wir die
+    # Zeichenkette, die der Build fest einbrennt (agent-go/Makefile:
+    # `-X …/internal/config.AgentVersion=<VERSION>`). `grep -a` statt
+    # `strings`, weil binutils auf einem Thin Client nicht gesetzt ist.
+    agent_ver=$(grep -a -o -E 'config\.AgentVersion=v[0-9][0-9A-Za-z.-]*' \
+                     /data/thinforge/thinforge-agent 2>/dev/null \
                   | head -1 \
-                  | cut -d= -f2)
+                  | cut -d= -f2 || true)
     if [ -n "$agent_ver" ]; then
         ok "Agent-Version (embedded): $agent_ver"
     else
-        note "Agent version could not be read from the binary"
+        note "Agent version could not be read from the binary (unflagged build?)"
     fi
 else
     bad "thinforge-agent missing or not executable: /data/thinforge/thinforge-agent"

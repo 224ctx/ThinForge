@@ -13,8 +13,8 @@ This directory contains full license texts and per-component metadata for every 
 
 | Component | License | Version shipped | Integration | Details |
 |-----------|---------|-----------------|-------------|---------|
-| Partclone | GPL v2 | 0.3.33 (Alpine pkg) | subprocess | [Partclone.md](Partclone.md) |
-| EZIO | GPL v2 | from `quellinfos/ezio/` | separate daemon (gRPC) | [EZIO.md](EZIO.md) |
+| Partclone | GPL v2 | 0.3.47-r0 (Alpine pkg) | subprocess | [Partclone.md](Partclone.md) |
+| EZIO | GPL v2 | from upstream at build time | separate daemon (gRPC) | [EZIO.md](EZIO.md) |
 
 ### Referenced / orchestrated, not distributed by ThinForge
 

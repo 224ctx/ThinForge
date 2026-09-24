@@ -26,6 +26,14 @@
 
 set -euo pipefail
 
+# Alle apt/dpkg-Aufrufe nicht-interaktiv: ohne TTY versucht debconf sonst
+# Dialog/Readline/Teletype-Frontends und gibt seitenweise Fallback-Warnungen
+# aus (oder haengt im schlimmsten Fall an einem Prompt). Gilt prozessweit fuer
+# alle hier gestarteten apt-/dpkg-/Sub-Skript-Aufrufe. Gleicher Riegel wie in
+# install-debian-minimal.sh, DistroTweaks/cleanup-debian.sh und
+# DebianVDIClients/install-vdi-clients-debian.sh.
+export DEBIAN_FRONTEND=noninteractive
+
 # -- Konfiguration -----------------------------------------------------------
 
 ESP_SIZE_MB=2048
@@ -202,11 +210,40 @@ do_finish() {
             log "Installing grub-btrfs..."
             apt-get install -y -qq grub-btrfs 2>/dev/null || warn "grub-btrfs could not be installed"
         else
-            log "Installing grub-btrfs from GitHub..."
+            # grub-btrfs aus dem GitHub-Quelltext bauen. Drei Dinge waren hier
+            # falsch:
+            #  (1) Ungepinnt — es lief als root das, was gerade auf dem
+            #      Default-Branch stand, und zwar auf der Maschine, die zum
+            #      Gold-Abbild der Flotte wird. Jetzt fester Tag.
+            #  (2) Festes /tmp/grub-btrfs — /tmp ist world-writable; ein
+            #      liegengebliebenes Verzeichnis aus einem abgebrochenen Lauf
+            #      oder ein untergeschobenes laesst `git clone` scheitern.
+            #      Jetzt ein eigenes mktemp-Verzeichnis.
+            #  (3) `cd /tmp && git clone && cd … && make install` als
+            #      &&-Liste: `set -e` greift nur beim LETZTEN Glied, ein
+            #      fehlgeschlagener clone (kein Netz, kein git — vor diesem
+            #      Punkt laeuft kein `apt-get update`, das Nachinstallieren
+            #      von git/make kann also selbst scheitern) lief stumm durch,
+            #      und der Abschlussbanner versprach danach trotzdem
+            #      "GRUB: ThinForge boot logic with rollback". Jetzt eine
+            #      Subshell hinter einem gemeinsamen Guard, plus Nachweis,
+            #      dass die Datei existiert, die gleich darunter gepatcht wird.
+            local GRUB_BTRFS_TAG="v4.14"
+            log "Installing grub-btrfs ${GRUB_BTRFS_TAG} from GitHub..."
             apt-get install -y -qq git make 2>/dev/null || true
-            cd /tmp && git clone https://github.com/Antynea/grub-btrfs.git && cd grub-btrfs && make install
-            rm -rf /tmp/grub-btrfs
-            cd /
+            local gb_tmp
+            gb_tmp=$(mktemp -d)
+            (
+                cd "$gb_tmp" \
+                && git clone --depth 1 --branch "$GRUB_BTRFS_TAG" \
+                       https://github.com/Antynea/grub-btrfs.git \
+                && cd grub-btrfs \
+                && make install
+            ) || warn "grub-btrfs installation failed — no snapshot boot entries"
+            rm -rf "$gb_tmp"
+            if [ ! -f /etc/grub.d/41_snapshots-btrfs ]; then
+                warn "grub-btrfs did not install /etc/grub.d/41_snapshots-btrfs — rollback boot entries will be missing"
+            fi
         fi
     fi
 
@@ -526,9 +563,26 @@ NTPCONF
     # ── System auf den neuesten Stand bringen ────────────────────────
 
     log "Updating system (apt-get dist-upgrade)..."
-    apt-get update -qq
-    apt-get dist-upgrade -y -qq 2>/dev/null || warn "System update failed"
-    log "System updated."
+    # Unguarded brach ein nicht erreichbares Repo hier do_finish ab — und damit
+    # blieben auch update-initramfs (backt den overlay-snap-ro-Hook ein) und
+    # der Branding-Schritt aus.
+    apt-get update -qq || warn "apt-get update failed — package sources may not be reachable"
+    # --force-confdef/--force-confold: bei geaenderten conffiles ohne Rueckfrage
+    # die installierte Version behalten (kein dpkg-Prompt, der den Lauf
+    # anhaelt). Noetig, weil weiter oben in diesem Lauf schon sshd_config und
+    # chrony.conf per sed veraendert wurden — dpkg sieht also lokal geaenderte
+    # conffiles und will nachfragen, sobald das Upgrade eine neue Fassung
+    # dieser Pakete bringt. Gleiche Optionen wie in install-debian-minimal.sh.
+    if apt-get dist-upgrade -y -qq \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+        2>/dev/null
+    then
+        SYSTEM_UPDATED=1
+        log "System updated."
+    else
+        SYSTEM_UPDATED=0
+        warn "System update failed — the system is NOT fully patched."
+    fi
 
     # ── Paket-Cache aufraeumen ───────────────────────────────────────
 
@@ -575,7 +629,13 @@ NTPCONF
     echo -e "  Agent:      Installed"
     echo -e "  SSH:        Key-only auth enabled"
     echo -e "  Data:       /data mounted"
-    echo -e "  System:     Updated + cache cleaned"
+    # Nicht behaupten, was nicht stimmt: bei fehlgeschlagenem dist-upgrade
+    # stand hier bisher trotzdem "Updated".
+    if [ "${SYSTEM_UPDATED:-0}" = "1" ]; then
+        echo -e "  System:     Updated + cache cleaned"
+    else
+        echo -e "  System:     ${YELLOW}NOT fully updated${NC} (dist-upgrade failed) + cache cleaned"
+    fi
     echo ""
     echo -e "  ${YELLOW}Next steps:${NC}"
     echo -e "  1. Customize system (drivers, software, configuration)"

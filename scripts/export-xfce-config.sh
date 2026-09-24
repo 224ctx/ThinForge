@@ -60,27 +60,38 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# -- Aufraeumen ----------------------------------------------------------------
+# EIN Trap fuer alles Temporaere. Ein zweites `trap ... EXIT` weiter unten
+# ersetzte den ersten, und die Schluesselkopie bliebe liegen.
+TMP_KEY=""
+WORK_DIR=""
+cleanup() {
+  if [ -n "$TMP_KEY" ]; then rm -f "$TMP_KEY"; fi
+  if [ -n "$WORK_DIR" ]; then rm -rf "$WORK_DIR"; fi
+}
+trap cleanup EXIT
+
 # -- SSH-Key finden ------------------------------------------------------------
-if [ -z "$SSH_KEY" ]; then
-  for candidate in \
-    "$PROJECT_ROOT/ThinForgeDaten/ssh/provisioning_key" \
-    /tmp/tf_key; do
-    if [ -f "$candidate" ]; then
-      SSH_KEY="$candidate"
-      break
-    fi
-  done
+# Kein fester Pfad unter /tmp als Kandidat: eine dort abgelegte Datei eines
+# anderen Kontos wuerde sonst still als SSH-Identitaet uebernommen.
+if [ -z "$SSH_KEY" ] && [ -f "$PROJECT_ROOT/ThinForgeDaten/ssh/provisioning_key" ]; then
+  SSH_KEY="$PROJECT_ROOT/ThinForgeDaten/ssh/provisioning_key"
 fi
 
 if [ -z "$SSH_KEY" ]; then
-  # Key aus Container kopieren
+  # Key aus dem Container in eine frische Datei kopieren, die mktemp mit 0600
+  # anlegt, BEVOR der Schluessel hineinfliesst; der Trap loescht sie am Ende.
+  # Frueher landete er in der festen Datei /tmp/tf_key, beim Umlenken mit der
+  # umask angelegt (fuer alle lesbar) und nie geloescht — dieser Schluessel
+  # oeffnet root-SSH auf jedem verwalteten Geraet.
   log "SSH-Key aus Container kopieren..."
-  docker compose exec -T backend cat /data/ssh/provisioning_key > /tmp/tf_key 2>/dev/null
-  chmod 600 /tmp/tf_key
-  SSH_KEY="/tmp/tf_key"
+  TMP_KEY=$(mktemp)
+  docker compose exec -T backend cat /data/ssh/provisioning_key > "$TMP_KEY" 2>/dev/null \
+    || fatal "SSH-Key nicht aus dem Backend-Container lesbar. Nutze --key=PFAD"
+  SSH_KEY="$TMP_KEY"
 fi
 
-[ -f "$SSH_KEY" ] || fatal "SSH-Key nicht gefunden. Nutze --key=PFAD"
+[ -s "$SSH_KEY" ] || fatal "SSH-Key nicht gefunden. Nutze --key=PFAD"
 
 # -- SSH-Verbindung konfigurieren ---------------------------------------------
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
@@ -118,7 +129,6 @@ CONFIG_ARCHIVE=$($SSH_CMD "
 log "ZIP-Paket erstellen..."
 
 WORK_DIR=$(mktemp -d)
-trap "rm -rf $WORK_DIR" EXIT
 
 # Config-Archiv decodieren
 echo "$CONFIG_ARCHIVE" | base64 -d > "$WORK_DIR/xfce-config.tar.gz"

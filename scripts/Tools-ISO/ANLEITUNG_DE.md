@@ -10,7 +10,7 @@
 ```
 0. Im ThinForge-UI Cloning-VM-Card -> "Basis HD erstellen" klicken,
    gewuenschte Groessen eingeben, Anwenden. Damit ist die qcow2 mit
-   ESP + System (btrfs/@root) + Data (btrfs/@data) vorbereitet.
+   ESP + System (btrfs, noch ohne Subvolumes) + Data (btrfs/@data) vorbereitet.
 1. Von Debian Live-ISO (XFCE) booten
 2. Im Dateimanager auf THINFORGE_TOOLS navigieren, Terminal oeffnen
 3. Vorbereiten:     sudo bash install-debian.sh prepare /dev/vda
@@ -36,13 +36,13 @@ Richtet das installierte System ein:
 
 | Schritt | Beschreibung |
 |---------|-------------|
-| GRUB | 5s Timeout, Snapshot-Menue sichtbar |
+| GRUB | 2s Timeout, Snapshot-Menue sichtbar |
 | grub-btrfs | Snapshots als Boot-Eintraege |
-| Home-Mount-Generator | Automatischer @home-Swap bei Rollback |
-| Data-Partition | ~5 GB am Ende der Disk |
-| Pakete | nfs-common, zstd, curl, jq, wireguard-tools, python3, ffmpeg, xdotool, minisign |
+| Data-Partition | Partition 3 aus Schritt 0 (Label „Daten") als `/data` (Subvolume `@data`) in fstab eintragen und einhaengen; fehlt sie, bricht `finish` vor der Agent-Installation ab |
+| Pakete | nfs-common, zstd, curl, jq, python3, x11-utils, minisign, chrony, zenity, yad |
+| NetBird-Agent | VPN-Client ueber das offizielle Installationsskript (`pkgs.netbird.io/install.sh`); Dienst auf Relay-Zwang und IPv6-aus umgestellt, danach deaktiviert und gestoppt (aktiviert wird er erst, wenn ThinForge das Geraet fuer das VPN freischaltet); `/etc/netbird` und `/var/lib/netbird` zeigen auf `/data/netbird`, damit die Anmeldung Delta-Updates ueberlebt |
 | SSH | Key-only Auth, Root per Key |
-| Agent | ThinForge Agent + Delta-Update-Service |
+| Agent | ThinForge Agent + Delta-Update-Service. Das Agent-Binary wird vorher mit `minisign` gegen seine Signatur und den Signierschluessel des Servers geprueft; passt sie nicht, bricht `finish` ab (siehe unten) |
 | Branding | tf-wall.png → `/etc/thinforge/`, gesetzt als Desktop-Hintergrund, GRUB-/Plymouth-Boot-Splash und Login-Hintergrund (nicht-fatal) |
 | System-Update | apt-get dist-upgrade + Cache bereinigen |
 
@@ -58,7 +58,7 @@ netinst-ISO bereits in der Beschaffung vorhanden ist.
 ```
 0. Im ThinForge-UI Cloning-VM-Card -> "Basis HD erstellen" klicken,
    gewuenschte Groessen eingeben, Anwenden. Damit ist die qcow2 mit
-   ESP + System (btrfs/@root) + Data (btrfs/@data) vorbereitet.
+   ESP + System (btrfs, noch ohne Subvolumes) + Data (btrfs/@data) vorbereitet.
 1. VM mit netinst-ISO booten, normaler d-i (kein Rescue noetig)
 2. Im d-i: "Partitionen manuell aendern":
      Partition 1 -> /boot/efi   (FAT32 erhalten, NICHT formatieren)
@@ -82,7 +82,14 @@ TTY oder ohne Auto-Mount manuell: `mount /dev/sr1 /mnt/tools`.
 
 ### finish
 
-Identisch zu `install-debian.sh finish` — siehe Tabelle oben.
+Wie `install-debian.sh finish` — siehe Tabelle oben. Zusaetzlich waehlt man zu
+Beginn die lokalen Benutzer aus, die sudo-Rechte bekommen (der erste davon
+erhaelt LightDM-Autologin ohne Bildschirmsperre), und nicht benoetigte
+vorinstallierte Programme werden entfernt (`DistroTweaks/cleanup-debian.sh`).
+Am Ende bietet das Skript die Installation der VDI-Clients an
+(`DebianVDIClients/install-vdi-clients-debian.sh`). Per `su` statt `sudo`
+gestartet, richtet es sudo fuer das aufrufende Konto ein und startet sich
+darueber neu.
 
 `install-debian-minimal.sh` hat keinen `prepare`-Step: Das Layout entsteht
 in Schritt 0 ueber das UI, der netinst-d-i nutzt es direkt — kein Calamares-
@@ -120,13 +127,13 @@ Truth, Calamares meldet sich von selbst, falls die Partitionen nicht passen.
 
 | Schritt | Beschreibung |
 |---------|-------------|
-| GRUB | 5s Timeout, Snapshot-Menue sichtbar |
+| GRUB | 2s Timeout, Snapshot-Menue sichtbar |
 | grub-btrfs | Snapshots als Boot-Eintraege |
-| Home-Mount-Generator | Automatischer @home-Swap bei Rollback |
-| Data-Partition | ~5 GB am Ende der Disk |
-| Pakete | nfs-utils, zstd, curl, jq, wireguard-tools, python, ffmpeg, xdotool |
+| Data-Partition | `advanced/create-data-partition.sh`: Partition 3 aus Schritt 0 als `/data` (Subvolume `@data`) einhaengen und in fstab eintragen, fehlt sie, aus dem freien Platz am Ende der Disk anlegen; ohne `/data` bricht `finish` ab |
+| Pakete | nfs-utils, zstd, curl, jq, python, xorg-xdpyinfo, minisign, zenity, yad |
+| NetBird-Agent | wie bei Debian: offizielles Installationsskript, Relay-Zwang und IPv6-aus, Dienst deaktiviert und gestoppt, Zustand unter `/data/netbird` |
 | SSH | Key-only Auth, Root per Key |
-| Agent | ThinForge Agent + Delta-Update-Service |
+| Agent | ThinForge Agent + Delta-Update-Service. Das Agent-Binary wird vorher mit `minisign` gegen seine Signatur und den Signierschluessel des Servers geprueft; passt sie nicht, bricht `finish` ab (siehe unten) |
 | Branding | tf-wall.png → `/etc/thinforge/`, gesetzt als Desktop-Hintergrund, GRUB-/Plymouth-Boot-Splash und Login-Hintergrund (nicht-fatal) |
 | System-Update | pacman -Syu + Cache bereinigen |
 
@@ -157,7 +164,23 @@ sudo bash install-debian.sh finish --server=https://thinforge.firma.de
 sudo bash install-manjaro.sh finish --server=https://thinforge.firma.de
 ```
 
-Setzt die Server-URL wenn keine `server_url`-Datei auf der ISO vorhanden ist.
+Legt nur den NTP-Server der VM fest (Debian: chrony, Manjaro/Arch/CachyOS:
+systemd-timesyncd) und hat dabei Vorrang vor dem Host aus `advanced/server_url`.
+Die Server-URL des Agenten kommt immer aus `advanced/server_url` auf der ISO;
+fehlt die Datei, bricht die Agent-Installation ab.
+
+## Agent-Signatur
+
+`advanced/1-create-client-management.sh` (von `finish` aufgerufen) installiert
+den Agenten nur, wenn `thinforge-agent` zu `thinforge-agent.minisig` und zum
+eben installierten Signierschluessel des Servers passt (`minisign -V`). Fehlt
+`minisign`, installiert das Skript es per apt/dnf/pacman nach — dafuer braucht
+die VM Zugang zu den Paketquellen; die `install-*.sh` bringen es in ihrer
+Paketliste ohnehin mit. Meldet das Skript `signature check of the agent binary
+FAILED` oder `thinforge-agent.minisig is missing`: auf dem Server unter
+Clients → Agent das Binary bauen bzw. signieren („Signieren" oder „Neu
+signieren"), die VM neu starten (der Server baut die Tools-ISO dabei neu),
+die ISO neu einhaengen und `finish` erneut ausfuehren.
 
 ## ISO-Struktur
 
@@ -173,19 +196,36 @@ THINFORGE_TOOLS/
 ├── tf-wall.png
 ├── DistroTweaks/
 │   ├── branding-common.sh
+│   ├── cleanup-debian.sh
 │   ├── install-branding-debian.sh
 │   ├── install-branding-debian-minimal.sh
 │   ├── install-branding-arch.sh
 │   ├── install-branding-cachyos.sh
 │   └── install-branding-manjaro.sh
+├── DebianVDIClients/
+│   ├── install-vdi-clients-debian.sh
+│   ├── README.md
+│   ├── urls.conf.example
+│   └── (hochgeladene VDI-Client-Pakete)
 └── advanced/
     ├── 1-create-client-management.sh
-    ├── agent-apply-delta.sh
+    ├── agent-apply-update.service
+    ├── Agent-Check.sh
+    ├── agent-migrate.sh
     ├── create-data-partition.sh
-    ├── agent-home-mount-generator
-    ├── thinforge-agent.py
+    ├── enable-ssh.sh
+    ├── manual-manage-snapshots.sh
+    ├── provision-remote-desktop.sh
+    │   (die folgenden Dateien erzeugt der Server beim ISO-Bau)
+    ├── thinforge-agent            Agent-Binary aus agent-go/bin/
+    ├── thinforge-agent.minisig    seine Signatur (Pflicht)
+    ├── thinforge.pub              Signierschluessel des Servers
+    ├── agent-version              Versionsangabe, falls bekannt
     ├── server_url
     ├── server.crt
     ├── provisioning_key.pub
     └── heartbeat_token
 ```
+
+Ohne gebautes, signiertes Agent-Binary baut der Server keine Tools-ISO; die
+Cloning-VM startet dann nicht, und die Meldung nennt den fehlenden Schritt.

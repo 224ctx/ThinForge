@@ -33,24 +33,29 @@
 - 4x P2 (Optimierungen) — Performance, Robustheit
 - 3x P3 (Nice-to-have) — Frontend, Supply-Chain, Verschluesselung
 
-### Implementierungs-Status (Stand: 2026-04-08)
+### Implementierungs-Status (Stand: 2026-09-16, Abgleich gegen den Rust-Code)
+
+Die Datei- und Zeilenangaben in den Befunden unten beziehen sich auf das fruehere Python-Backend zum Audit-Datum. Die Tabelle nennt den Stand im heutigen Rust-Code (`crates/thinforge-services`, `crates/thinforge-api`).
 
 | Item | Status | Bemerkung |
 |------|--------|-----------|
-| P0-1 | **OFFEN** | Keine Input-Validierung in `network.py` |
-| P0-2 | **OFFEN** | Hosts-File-Injection nicht gefixt |
-| P0-3 | **OFFEN** | Defense-in-Depth fehlt |
-| P0-4 | **OFFEN** | DHCP-Felder nicht validiert |
-| P0-5 | **OFFEN** | `no_root_squash` noch hardcoded (`nfs_service.py:51`) |
-| P0-6 | **OFFEN** | `DEFAULT_NETWORK = "192.168.0.0/24"` Fallback existiert noch |
-| P1-1 | **OFFEN** | Kein `asyncio.Lock()` |
+| P0-1 | **BEHOBEN (Schreib-Schicht)** | `dnsmasq_service::render_dns_conf` schreibt nur Upstream-Server, die `dns_upstream_safe` bestehen, und verwirft den Rest mit Warnung (seit 2026-05-30). Die DNS-Seite der API prueft die Werte nicht selbst und antwortet auch bei verworfenen Eintraegen mit Erfolg; `dns_servers` der DHCP-Konfiguration prueft die API (siehe P0-4) |
+| P0-2 | **BEHOBEN (Schreib-Schicht)** | `render_dns_hosts` schreibt nur Eintraege mit gueltiger IP und DNS-sicherem Namen (`dns_name_safe`), der Rest wird mit Warnung verworfen |
+| P0-3 | **BEHOBEN** | Die Pruefung sitzt in den Render-Funktionen von `dnsmasq_service`, unabhaengig vom Aufrufer |
+| P0-4 | **BEHOBEN** | `network::dhcp_konfiguration_pruefen` weist vor dem Speichern ungueltige Werte mit 400 ab (Modus, Range, Netzmaske, Lease-Zeit, Gateway, Rollout-IP, Management-DNS, DNS-Server, Domain; seit 2026-09-06); das Interface muss auf dem Host existieren |
+| P0-5 | **OFFEN** | Alle Exports tragen weiter `no_root_squash` (`nfs_service.rs`, `NFS_OPTS_BASE`) |
+| P0-6 | **BEHOBEN** | Kein Subnetz-Fallback: ohne Client-IPs entfaellt die Export-Zeile (`build_client_specs` liefert `None`); `DEFAULT_NETWORK` fuellt nur noch den Kommentarkopf der Datei |
+| P1-1 | **BEHOBEN** | Der Freigabe-Zustand liegt hinter einem `Mutex` (`with_state`/`with_state_restored`); das Schreiben der Datei selbst ist nicht serialisiert (siehe P2-2) |
 | P1-2 | **GEGENSTANDSLOS** | Es gibt keine Restart-Logik mehr; NFS-Reload laeuft ausschliesslich ueber `exportfs -ra` |
-| P1-3 | **OFFEN** | `log-queries` noch hardcoded |
-| P1-4 | **OFFEN** | Google DNS Fallback noch in mehreren Stellen |
-| P1-5 | **OFFEN** | Infinite-Lease Edge Case |
+| P1-3 | **OFFEN** | `--log-queries --log-dhcp` fest im dnsmasq-Entrypoint (`docker/dnsmasq/entrypoint.sh`), `log-dhcp` zusaetzlich in `docker/dnsmasq/dnsmasq.conf` |
+| P1-4 | **TEILWEISE** | Der Einrichtungsassistent uebernimmt den Management-DNS als Upstream; als Vorgabe stehen weiter `8.8.8.8`/`8.8.4.4` (`dnsmasq_service.rs` Default-DNS-Konfiguration, Setup-Schema, DNS- und DHCP-Panel der Oberflaeche). Eine Umgebungsvariable `MANAGEMENT_DNS` gibt es nicht mehr |
+| P1-5 | **OFFEN** | `get_leases` setzt `is_active: expiry_ts > now_ts` — eine unendliche Lease (`0`) erscheint weiter als abgelaufen |
 | P2-1 | **GEGENSTANDSLOS** | DHCP-Save fasst NFS nicht an; Exports werden nur beim Share-Umschalten neu geladen |
-| P2-2 bis P2-4 | **OFFEN** | Optimierungen ausstehend |
-| P3-1 bis P3-3 | **OFFEN** | Nice-to-have ausstehend |
+| P2-2 | **OFFEN** | `nfs_service::write_exports` schreibt per `std::fs::write`, nicht atomar |
+| P2-3, P2-4 | **OFFEN** | Weder `neg-ttl` noch `dnssec` in der erzeugten Konfiguration |
+| P3-1 | **OFFEN** | Das DNS-Panel bietet zwei Upstream-Felder |
+| P3-2 | **GEGENSTANDSLOS** | Kein Fremd-Image mehr: der NFS-Server ist ein eigenes Image auf `alpine:3.24` mit `nfs-utils` (`docker/nfs-server/Dockerfile`) |
+| P3-3 | **OFFEN** | Kein DNS-over-TLS |
 
 ---
 

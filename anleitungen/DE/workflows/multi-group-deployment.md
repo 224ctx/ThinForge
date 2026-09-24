@@ -7,23 +7,23 @@ Seit dem 2026-04-22-Release unterstützt ThinForge **Multi-Group-Deployments**: 
 | Szenario | Empfohlener Modus |
 |---|---|
 | Gleicher Clone → mehrere Gruppen, gleichzeitig, im lokalen Netz | **Multicast mit Target-Mode „Mehrere Gruppen"** — streamt einmal über die Leitung, alle Clients empfangen parallel. |
-| Gleicher Clone → mehrere Gruppen, verschiedene Subnetze / Außenstellen über VPN | **BitTorrent** — Peer-Assist, Cache-Sharing zwischen Deployments. |
+| Gleicher Clone → mehrere Gruppen, verschiedene Subnetze im lokalen Netz | **BitTorrent** — Peer-Assist, Cache-Sharing zwischen Deployments. Außenstellen über VPN erreicht kein Clone-Deployment — dort nur Delta-Updates ([06](../06-rollouts.md#rollouts-und-vpn)). |
 | Verschiedene Clones → verschiedene Gruppen, alles gleichzeitig | **BitTorrent** pro Deployment. Multicast kann nur **einmal** gleichzeitig laufen (Protokoll-Limit), BitTorrent parallelisiert. |
 | Nur wenige Ziele, kein Multicast-fähiges Netz | **Unicast** — direkter Download pro Client. |
 
 ## Multi-Group per Multicast
 
-1. Menü **Cloning** → Tab **Deployments** → **Neu**.
-2. **Target-Modus** → `Mehrere Gruppen`.
-3. Im Select die gewünschten Gruppen anhaken. Die UI zeigt unten „N Clients insgesamt".
-4. **Clone** auswählen.
+1. Menü **Cloning** → Tab **Deployments** → **Neues Deployment**.
+2. Ziel → **Mehrere Gruppen**.
+3. Unter **Gruppen auswählen** die gewünschten Gruppen anhaken. Der Hinweis unten nennt, wie viele Clients aus wie vielen Gruppen das Deployment trifft.
+4. **Clone auswählen**.
 5. **Modus** → `Multicast`.
-6. Optional: Scheduling + Wake-on-LAN setzen (WoL weckt die Clients X Minuten vorher auf).
-7. **Anlegen**.
+6. Optional: **Geplanter Start** + **Wake-on-LAN beim Start senden** (das Magic-Packet geht zum geplanten Zeitpunkt raus, die Aktivierung läuft eine Minute vorher).
+7. **Deployen**.
 
-Alle Clients aller Gruppen stehen in einer einzigen Deployment-Zeile. Der Server wartet, bis alle Teilnehmer den PXE-Boot abgeschlossen haben, streamt dann das Image **einmal** und versorgt damit sämtliche Gruppen gleichzeitig.
+Alle Clients aller Gruppen stehen in einer einzigen Deployment-Zeile. Der Server wartet, bis alle Teilnehmer den PXE-Boot abgeschlossen haben — höchstens die **Wartezeit** aus den Multicast-Einstellungen, danach startet er mit den bereiten Clients —, streamt dann das Image **einmal** und versorgt damit sämtliche Gruppen gleichzeitig.
 
-**Gotcha:** Zweites gleichzeitiges Multicast-Deployment geht nicht — Address `224.0.0.1:2232` ist statisch. Die UI blockiert den Start entsprechend.
+**Gotcha:** Zweites gleichzeitiges Multicast-Deployment geht nicht — Address `224.0.0.1:2232` ist statisch. Der Server lehnt ein zweites aktives Multicast-Deployment ab.
 
 ## Parallele Deployments per BitTorrent
 
@@ -47,22 +47,22 @@ Workflow:
 
 Tabelle im Deployments-Tab:
 
-- **Multicast** — Chip zeigt `waiting N/M (MM:SS remaining)` während Bereitschaftsphase, dann `sending` während Stream, schließlich `complete`.
-- **BitTorrent** — Chip zeigt `preparing` (Slice-Extract / Torrent-Erzeugung), dann `seeders_ready` (Seeder läuft, Clients peer-assisten sich), dann `complete`. In der aufgeklappten Zeile siehst du pro Client die Partition, die gerade geschrieben wird, plus Prozent-Bar.
-- Pro Client-Zeile: `pending / deploying / done / failed / cancelled`, bei BitTorrent/Unicast auch **Neu starten** (nicht bei Multicast — dort hat ein Restart keinen Sinn, weil der Stream bereits weg ist).
+- **Multicast** — Chip zeigt „N/M bereit" mit Restzeit (M:SS) während der Bereitschaftsphase, dann die gerade gesendete Partition (bzw. „Sende...") während des Streams, schließlich „Gesendet".
+- **BitTorrent** — der Status steht zunächst auf „Vorbereitung…", ein Chip zeigt die Schritte („Seeder startet...", „Extrahiere...", „Erstelle Torrents...", „Starte Tracker..."), dann „Seeding (N Part.)", schließlich „Abgeschlossen". In der aufgeklappten Zeile siehst du pro Client die Partition, die gerade geschrieben wird, plus Prozent-Bar.
+- Pro Client-Zeile: Ausstehend / Wird geklont / Fertig / Fehlgeschlagen / Abgebrochen; bei fehlgeschlagenen oder abgebrochenen Clients unter BitTorrent/Unicast auch **Neu starten** (nicht bei Multicast — dort hat ein Restart keinen Sinn, weil der Stream bereits weg ist).
 
 ## Fehlerbehandlung
 
 - Ein Client meldet `failed` → Zeile aufklappen, **Neu starten**; Backend versucht den einzelnen Client erneut.
-- Gesamt-Deployment hängt → **Abbrechen** setzt Status auf `cancelled`; ggf. mit **Neu starten** (für failed/cancelled Clients) nachfassen.
-- Seeder startet nicht → Services-Panel prüfen (`thinforge-bt-seeder-service`-Container). Logs liefern Hinweis, ob opentracker oder EZIO blockiert wurde.
-- Multicast bleibt auf `waiting` hängen → Netzwerk-Issue (IGMP-Snooping, Switch-Konfig). Check `docs/architecture/cloning-pipeline.md` §5 für Details.
+- Gesamt-Deployment hängt → **Abbrechen** setzt Status auf „Abgebrochen"; ggf. mit **Fehlgeschlagene neu starten** (für fehlgeschlagene und abgebrochene Clients) nachfassen.
+- Seeder startet nicht → **Einstellungen → Dienste** prüfen (`thinforge-bt-seeder-service`-Container). Logs liefern Hinweis, ob opentracker oder EZIO blockiert wurde.
+- Multicast bleibt in der Bereitschaftsphase hängen → Netzwerk-Issue (IGMP-Snooping, Switch-Konfig).
 
 ## Nach dem Rollout
 
-- Deployment-Zeile ist `completed` oder `completed_with_errors`. **Löschen**-Button entfernt nur den Datensatz, nicht die Clones.
-- In **Clients** → Spalte `installed_image` zeigt die neue Version.
-- Bei eingeschalteter Post-Action (`reboot` / `shutdown`) sind die Clients bereits im Zielzustand.
+- Deployment-Zeile ist „Abgeschlossen" oder „Mit Fehlern abgeschlossen". **Löschen**-Button entfernt nur den Datensatz, nicht die Clones.
+- In **Clients** → Spalte **Installierte Version** zeigt die neue Version.
+- Mit **Nach Deploy** = Neustart oder Herunterfahren sind die Clients bereits im Zielzustand.
 
 ## Nächste Schritte
 
