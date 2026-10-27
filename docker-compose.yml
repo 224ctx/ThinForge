@@ -8,13 +8,17 @@
 #   1. docker login git.thinforge.org -u <user> (einmal pro Host)
 #      HTTPS auf Standardport — kein insecure-registries-Eintrag nötig.
 #   2. Das Repo ist trotzdem geklont — Volumes wie ./ansible, ./scripts,
-#      ./docker/grafana/provisioning, etc. werden weiterhin in Container
-#      gemountet. Das Image enthält nur die Runtime-Binaries.
+#      ./agent-go/bin oder ./migrations werden
+#      weiterhin in Container gemountet. Das Image enthält nur die
+#      Runtime-Binaries. (./docker/grafana/provisioning und
+#      ./docker/prometheus/prometheus.yml erst wieder, wenn Prometheus und
+#      Grafana reaktiviert sind — unten auskommentiert.)
 #
 # Verwendung:
 #   docker compose up -d
 #   docker compose --profile network up -d
 #   docker compose --profile monitoring up -d
+#     (derzeit ohne Dienste — Prometheus/Grafana sind ausgebaut)
 
 name: thinforge
 
@@ -29,6 +33,20 @@ x-no-search-domain: &no-search-domain
   dns_search:
     - .
 
+# Protokollgrenze fuer JEDEN Dienst (`logging: *default-logging`): Docker
+# behaelt je Container hoechstens drei Dateien zu 50 MB und verwirft danach
+# die aeltesten Zeilen. Bis 2026-10-09 hatten nur backend und worker eine
+# Grenze; alle anderen schrieben ohne, sofern der Docker-Dienst des Hosts
+# (/etc/docker/daemon.json) keine vorgab — darunter dnsmasq, das jede
+# DHCP-Vergabe und auf Wunsch jede DNS-Anfrage protokolliert. Siehe
+# docker-compose.yml; der Test `compose::tests::jeder_dienst_begrenzt_seine_protokolle`
+# prueft beide Dateien.
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   postgres:
     labels:
@@ -36,6 +54,15 @@ services:
       com.thinforge.icon: "mdi-database"
       com.thinforge.critical: "true"
     <<: *no-search-domain
+    # Offizielles Docker-Hub-Abbild. In der Dev-Compose lief bis 2026-10-26
+    # lief hier reg.mini.dev/postgres:18 (Minimus, glibc); Minimus hat den
+    # Betrieb eingestellt und die Registry am 2026-10-22 abgeschaltet.
+    # musl statt glibc: eine Datenbank, die unter dem Minimus-Abbild lief,
+    # sortiert Text anders, ihre Textindizes passen nicht mehr. thinforge-migrate
+    # baut sie beim ersten Start von Backend/Worker neu auf (Protokollzeile
+    # „Collation der Datenbank …"), bevor etwas schreibt. Der Einstieg startet
+    # als root und gibt PGDATA dem postgres-Benutzer des Abbilds (uid 70, bei
+    # Minimus 999). Tag `18-alpine` folgt der 18.x-Linie.
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
@@ -57,6 +84,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
 
   redis:
     labels:
@@ -64,6 +92,11 @@ services:
       com.thinforge.icon: "mdi-memory"
       com.thinforge.critical: "true"
     <<: *no-search-domain
+    # Offizielles Docker-Hub-Abbild (in der Dev-Compose bis 2026-10-26
+    # reg.mini.dev/redis:8, Minimus; die Registry ist abgeschaltet). Bringt
+    # redis-cli fuer den Healthcheck unten mit (Passwort ueber REDISCLI_AUTH,
+    # siehe environment). Kein Volume (nur Cache): beim Wechsel des Abbilds
+    # wird nichts uebernommen, und seine uid (999) spielt keine Rolle.
     image: redis:8-alpine
     restart: unless-stopped
     # Authentifizierung ist Pflicht (Review 2026-09-02 S5-1): die
@@ -88,6 +121,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *default-logging
 
   backend:
     labels:
@@ -108,6 +142,12 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: postgres
+      # Groesse des API-Pools (leer = Vorgabe 50/10, crates/thinforge-core/
+      # src/config.rs); Summe mit Worker und Migrator gegen Postgres
+      # max_connections halten. Bis Runde 5 reichte Compose die beiden nicht
+      # durch — ein Wert in .env blieb wirkungslos.
+      DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-}
+      DB_MIN_CONNECTIONS: ${DB_MIN_CONNECTIONS:-}
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD fehlt in .env — deploy.sh traegt sie nach}@redis:6379/0
       STORAGE_DIR: /data
       TFTP_ROOT: /var/lib/tftpboot
@@ -121,25 +161,41 @@ services:
       # Persist grype's vulnerability DB (~430 MB) across container restarts.
       # Without this, every UI-triggered scan re-downloads the DB (~8 min).
       GRYPE_DB_CACHE_DIR: /data/grype-cache
+      # syft und grype ohne ihre eigene Update-Pruefung (toolbox-data.anchore.io);
+      # der Scan setzt das beim Aufruf auch selbst (vulnerability_scan.rs).
+      GRYPE_CHECK_FOR_APP_UPDATE: "false"
+      SYFT_CHECK_FOR_APP_UPDATE: "false"
       # CVE-Exposure-Filter: local = nur gebundelte Acceptance-Liste,
-      # remote = vor Scan + Panel-Mount Remote-Version pruefen.
+      # remote = nach jedem Scan (im Nachlauf) die Remote-Version pruefen; das
+      # Panel liest nur diesen Zwischenstand, es fragt selbst nicht nach.
+      # Vorgabe local, also kein Abruf von git.thinforge.org.
       THINFORGE_ACCEPTANCE_LIST_MODE: ${THINFORGE_ACCEPTANCE_LIST_MODE:-local}
       THINFORGE_ACCEPTANCE_LIST_URL: ${THINFORGE_ACCEPTANCE_LIST_URL:-}
+      # KEV-Katalog fuer die Relevanz-Spalte: leer = aus (Vorgabe, kein Abruf
+      # von cisa.gov); einschalten mit einer HTTPS-Adresse in der .env.
       THINFORGE_KEV_URL: ${THINFORGE_KEV_URL:-}
       # Agent-Build im Backend deaktiviert — genutzt wird nur die mit dem
       # Release-Repo in agent-go/bin/ ausgelieferte Binary. Vorsigniert ist sie
       # nicht: Signaturen sind je Server (eigener Minisign-Schluessel), eine
-      # .minisig wird nie mitgeliefert. Nach jedem Pull, der die Binary tauscht,
-      # unter Clients → Agent „Neu signieren" — sonst antworten Tools-ISO-Bau und
-      # VM-Start mit 409 (toolsIsoAgentBinaryUnsigned bzw.
-      # toolsIsoAgentSignatureInvalid), und die Geraete verwerfen das Update.
-      # POST /agent/build liefert 403, und der First-Login-Auto-Build-Trigger
-      # ist ein No-Op.
+      # .minisig wird nie mitgeliefert. Das Backend prueft die Signatur bei
+      # jedem Start und signiert nach, wenn sie nicht passt — ./deploy.sh
+      # startet es nach jedem Pull neu. Bleibt die Binary trotzdem unsigniert
+      # (kein Signierschluessel, minisign scheitert; Grund im Backend-Log),
+      # nimmt das Backend agent-version zurueck, Clients → Agent zeigt „Nicht
+      # signiert", und Tools-ISO-Bau und VM-Start antworten mit 409
+      # (toolsIsoAgentBinaryUnsigned bzw. toolsIsoAgentSignatureInvalid) —
+      # dann dort „Signieren". POST /agent/build liefert 403, und der
+      # First-Login-Auto-Build-Trigger ist ein No-Op.
       THINFORGE_AGENT_BUILD_ENABLED: "false"
       DEBUG: "false"
       # Guacamole-Daemon (Remote-Desktop, Spec 2026-05-14)
       GUACD_HOST: guacd
       GUACD_PORT: "4822"
+      # Bild-Kanal an die von cloningvm_service.rs gestarteten
+      # `docker compose`-Subprozesse (gemountete /docker-compose.yml)
+      # durchreichen. Diese Compose nennt die Abbilder fest mit :release, die
+      # Variable ist hier nur der Gleichlauf mit der Registry-Compose.
+      THINFORGE_TAG: ${THINFORGE_TAG:-release}
     volumes:
       - ${STORAGE_DIR:-./ThinForgeDaten}:/data
       - ${STORAGE_DIR:-./ThinForgeDaten}/dnsmasq:/etc/dnsmasq.d
@@ -165,7 +221,8 @@ services:
       # Cache fuer den Remote-Version-Check der Akzeptanzliste.
       - acceptance_cache:/app/cache
       # Backend writes .minisig next to the agent binary during
-      # signing/generate-keypair, rotate-key and sign-existing flows.
+      # signing/generate-keypair, rotate-key and sign-existing flows, and at
+      # startup when the existing signature no longer matches.
       - ./agent-go/bin:/app/agent-go/bin
       # SBOM / vulnerability reports produced by
       # thinforge_services::vulnerability_scan::run_scan (UI-triggered only,
@@ -183,14 +240,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        # Wird postgres neu erstellt (anderes Abbild, geaenderte Einstellung),
+        # haelt Compose Backend und Worker vorher an und startet sie danach
+        # wieder (Compose >= 2.17). Ihr Einstieg laeuft thinforge-migrate, der
+        # nach einem Wechsel der C-Bibliothek die Indizes neu aufbaut, bevor
+        # etwas schreibt (crates/thinforge-migrate/src/collation.rs) — ohne
+        # die Zeile schrieben die alten Prozesse nach einem `docker compose
+        # up -d` weiter in falsch sortierte Indizes.
+        restart: true
       redis:
         condition: service_healthy
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
+    logging: *default-logging
 
   worker:
     labels:
@@ -209,14 +270,21 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD fehlt in .env — deploy.sh traegt sie nach}@redis:6379/0
       STORAGE_DIR: /data
       SIGNING_KEY_DIR: /data/keys
-      # Parität zum Backend: der Worker aktiviert geplante Deployments —
-      # er braucht dieselben Pfade (PXE/TFTP, dnsmasq, NFS-Config).
+      # Parität zum Dev-Compose (Audit docker-compose.registry.yml:186):
+      # der Worker aktiviert geplante Deployments — er braucht dieselben
+      # Pfade wie das Backend (PXE/TFTP, dnsmasq, NFS-Config), sonst laufen
+      # geplante Deployments im Release-Deployment anders/fehlerhaft als im Dev.
       TFTP_ROOT: /var/lib/tftpboot
       THINFORGE_ENABLED_PROFILES: ${THINFORGE_ENABLED_PROFILES:-}
       # Groesse des Worker-Pools (leer = Vorgabe 24/2, crates/thinforge-core/
       # src/config.rs); Summe mit der API gegen Postgres max_connections halten.
       WORKER_DB_MAX_CONNECTIONS: ${WORKER_DB_MAX_CONNECTIONS:-}
       WORKER_DB_MIN_CONNECTIONS: ${WORKER_DB_MIN_CONNECTIONS:-}
+      # Bild-Kanal wie beim Backend: der Worker startet BitTorrent-Seeder und
+      # Multicast-Sender mit der Abbild-Referenz aus der gemounteten
+      # /docker-compose.yml (dienst_abbild.rs, seit 2026-10-20); hier fest
+      # :release.
+      THINFORGE_TAG: ${THINFORGE_TAG:-release}
     volumes:
       - ${STORAGE_DIR:-./ThinForgeDaten}:/data
       - ${STORAGE_DIR:-./ThinForgeDaten}/ssh:/data/ssh
@@ -224,8 +292,14 @@ services:
       - ${STORAGE_DIR:-./ThinForgeDaten}/tftp:/var/lib/tftpboot
       - ${STORAGE_DIR:-./ThinForgeDaten}/nfs-config:/data/nfs-config
       - ./agent-go/bin:/app/agent-go/bin:ro
-      # Lizenzmodell v2: der Worker prueft beim VPN-Aktivieren die Lizenz
-      # selbst (activate_remote_peer laeuft im Worker) — read-only Mount.
+      # Abonnementdatei (Lizenzmodell v2, VPN-Plaetze), nur lesend. Die
+      # Platzgrenze prueft das Backend synchron im Request (handlers/vpn.rs →
+      # vpn::enrollment::activate_client_with_seats, liest die Datei bei jeder
+      # Aktivierung frisch). Der Worker braucht sie nur fuer den Restposten-Arm
+      # Job::ActivateVpnClient (Auftragstyp vpn_activate, ueber
+      # Auftragsvorlagen weiter zustellbar), der dieselbe Pruefung aufruft.
+      # Geschrieben wird das Verzeichnis nur vom Backend (Upload, Entfernen,
+      # Restore) — docs/architecture/licensing.md §4.
       - ./license:/app/license:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/docker-compose.yml:ro
@@ -238,14 +312,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+        # wie beim Backend: vor einem neu erstellten postgres anhalten, danach
+        # mit Migrator neu starten
+        restart: true
       redis:
         condition: service_healthy
     restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
+    logging: *default-logging
 
   frontend:
     labels:
@@ -254,28 +327,36 @@ services:
     <<: *no-search-domain
     image: git.thinforge.org/thinforge/thinforge-frontend:release
     restart: unless-stopped
-    volumes:
-      - ./docs/CHANGELOG.md:/docs/CHANGELOG.md:ro
+    # Kein Volume: die App-Version entsteht beim Build (siehe
+    # docker/frontend/Dockerfile); der bis 2026-10-01 eingehaengte
+    # ./docs/CHANGELOG.md wurde zur Laufzeit von niemandem gelesen.
     ports:
       # Bind to 127.0.0.1 only — Caddy reverse-proxies frontend on :443.
-      # See docs/security-audit-2026-04-18.md F-CR-06.
+      # See docs/security/security-audit-2026-04-18.md F-CR-06.
       - "127.0.0.1:3000:3000"
     env_file:
       - .env
     healthcheck:
-      # exec-Form + statische Go-Probe: das Minimus-Caddy-Image ist distroless
-      # (kein sh/wget) — die Probe ist im Frontend-Image enthalten (ab v2026.07.19-2).
+      # exec-Form + statische Go-Probe (docker/frontend/Dockerfile, probe-Stage):
+      # aus der Minimus-Zeit (distroless, ohne sh/wget); sie bleibt im
+      # offiziellen Abbild.
       test: ["CMD", "/healthprobe", "http://127.0.0.1:3000"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 15s
+    logging: *default-logging
 
   caddy:
     labels:
       com.thinforge.label: "Caddy (Proxy)"
       com.thinforge.icon: "mdi-shield-outline"
     <<: *no-search-domain
+    # Offizielles Docker-Hub-Abbild (in der Dev-Compose bis 2026-10-26
+    # reg.mini.dev/caddy:latest, Minimus, mit `user: "0"`; die Registry ist
+    # abgeschaltet). Laeuft wie vorgegeben als root: Caddy bindet die
+    # privilegierten :80/:443 unter network_mode:host und schreibt in die
+    # root-eigenen Bind-Mounts (/data, /config).
     image: caddy:latest
     restart: unless-stopped
     # Reverse-Proxy fuer das Mgmt-Netz — gehoert zur Network-Gruppe im
@@ -296,16 +377,17 @@ services:
       - ${STORAGE_DIR:-./ThinForgeDaten}/caddy/certs:/etc/caddy/certs:ro
       - ${STORAGE_DIR:-./ThinForgeDaten}/tftp:/srv/tftp:ro
     healthcheck:
-      # Caddy antwortet auf 127.0.0.1:443 im host-mode. :80 ist nur an
-      # die Client-Netz-IP gebunden, ein generischer localhost:80-Check
-      # wuerde auf einem frischen Setup ohne rollout_ip fehlschlagen.
-      test: ["CMD", "wget", "--no-check-certificate", "-qO", "/dev/null", "https://127.0.0.1:443"]
+      # Die Admin-API auf 127.0.0.1:2019 laeuft immer, egal an welche Adressen
+      # der Setup-Assistent die Listener bindet: :80/:443 liegen nur auf den
+      # Listener-Adressen, nicht auf 127.0.0.1 (so auf .33, 2026-10-26).
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:2019/config/"]
       interval: 15s
       timeout: 5s
       retries: 3
     depends_on:
       - backend
       - frontend
+    logging: *default-logging
 
   guacd:
     # Braucht den Anker so noetig wie sonst kein Dienst: guacd loest den
@@ -335,8 +417,10 @@ services:
     # Profile dient ausserdem der UI-Gruppierung im Services-Panel.
     profiles:
       - network
-    volumes:
-      - ${STORAGE_DIR:-./ThinForgeDaten}/guacd-recordings:/recordings:rw
+    # Kein Volume: ThinForge setzt keine `recording-*`-Parameter, guacd
+    # zeichnet nichts auf. Der frueher eingebundene `guacd-recordings`-Ordner
+    # blieb leer und war nur beschreibbare Host-Flaeche fuer einen
+    # netzseitigen Dienst (entfernt 2026-09-30).
     environment:
       GUACD_LOG_LEVEL: info
     healthcheck:
@@ -344,13 +428,18 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    logging: *default-logging
 
   dnsmasq:
     labels:
       com.thinforge.label: "dnsmasq (DHCP/PXE)"
       com.thinforge.icon: "mdi-lan"
     image: git.thinforge.org/thinforge/thinforge-dnsmasq:release
-    restart: unless-stopped
+    # `always` statt `unless-stopped` — Begruendung siehe docker-compose.yml:
+    # dnsmasq traegt DHCP+DNS des Rollout-LANs, ein Ausbleiben nach dem Boot
+    # legt die gesamte Client-Flotte still. Der Entrypoint verhindert den
+    # Start vor dem Setup-Wizard.
+    restart: always
     profiles:
       - network
     cap_add:
@@ -362,14 +451,15 @@ services:
     environment:
       THINFORGE_BACKEND: http://127.0.0.1:8000
     healthcheck:
-      # Prozess + Rollout-Interface-Existenz — Script ist im Image
-      # (docker/dnsmasq/healthcheck.sh, seit bind-dynamic).
+      # Prozess + Rollout-Interface-Existenz (siehe docker-compose.yml) —
+      # Script ist im Image (docker/dnsmasq/healthcheck.sh, seit bind-dynamic).
       test: ["CMD", "/healthcheck.sh"]
       interval: 15s
       timeout: 5s
       retries: 3
     depends_on:
       - backend
+    logging: *default-logging
 
   netbird:
     labels:
@@ -379,7 +469,7 @@ services:
     # Offizielles Upstream-Image (docker compose pull = neueste Version).
     image: netbirdio/netbird:latest
     # Entrypoint-Override → idle Daemon; Backend enrollt per exec
-    # (netbird_service::bootstrap_server_peer).
+    # (handlers::vpn::bootstrap_server_peer). Siehe docker-compose.yml.
     entrypoint: ["netbird"]
     command: ["service", "run"]
     restart: unless-stopped
@@ -400,6 +490,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging: *default-logging
 
   chrony:
     labels:
@@ -422,6 +513,7 @@ services:
       start_period: 10s
     depends_on:
       - backend
+    logging: *default-logging
 
   nfs-server:
     labels:
@@ -436,8 +528,14 @@ services:
     volumes:
       - ${STORAGE_DIR:-./ThinForgeDaten}/clones:/nfs/clones
       - ${STORAGE_DIR:-./ThinForgeDaten}/captures:/nfs/captures
-      - ${STORAGE_DIR:-./ThinForgeDaten}/deltas:/nfs/deltas
-      - ${STORAGE_DIR:-./ThinForgeDaten}/nfs-config/exports:/etc/exports:ro
+      # `deltas` ist seit T22 (2026-05-07) nicht mehr exportiert — Deltas gehen
+      # ueber HTTPS (`/api/v1/agent/deltas/{file}`) raus. Der Mount ist deshalb
+      # entfallen (2026-09-30).
+      # Das ganze Verzeichnis, nicht die Datei (Runde 6, T143): das Backend
+      # schreibt `exports` per tmp + rename, und ein Einzeldatei-Mount haengt am
+      # Inode — `exportfs -ra` laese nach dem ersten rename fuer immer den alten
+      # Stand. Der Entrypoint verlinkt /etc/exports auf die Datei hier drin.
+      - ${STORAGE_DIR:-./ThinForgeDaten}/nfs-config:/etc/thinforge-nfs:ro
     healthcheck:
       test: ["CMD-SHELL", "rpcinfo -t localhost 100003 3 2>/dev/null || rpcinfo -p localhost 2>/dev/null | grep -q nfs"]
       interval: 15s
@@ -446,10 +544,11 @@ services:
       start_period: 10s
     depends_on:
       - backend
+    logging: *default-logging
 
   # --- Deaktivierte Services (2026-04-20) ---
   # prometheus, grafana, semaphore sind temporaer ausgebaut.
-  # Siehe docs/deaktivierte-features.md fuer Reaktivierung.
+  # Siehe docs/reference/deaktivierte-features.md fuer Reaktivierung.
   # Volume-Daten bleiben unter ThinForgeDaten/ erhalten.
 #   prometheus:
 #     <<: *no-search-domain
@@ -467,7 +566,7 @@ services:
 #       - ${STORAGE_DIR:-./ThinForgeDaten}/prometheus:/prometheus
 #     ports:
 #       # Bind to 127.0.0.1 only — Prometheus is admin-internal, no LAN access.
-#       # See docs/security-audit-2026-04-18.md F-CR-06.
+#       # See docs/security/security-audit-2026-04-18.md F-CR-06.
 #       - "127.0.0.1:9090:9090"
 #     healthcheck:
 #       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:9090/-/healthy"]
@@ -492,7 +591,7 @@ services:
 #       - ${STORAGE_DIR:-./ThinForgeDaten}/grafana:/var/lib/grafana
 #     ports:
 #       # Bind to 127.0.0.1 only — Grafana is admin-internal, no LAN access.
-#       # See docs/security-audit-2026-04-18.md F-CR-06.
+#       # See docs/security/security-audit-2026-04-18.md F-CR-06.
 #       - "127.0.0.1:3001:3000"
 #     healthcheck:
 #       test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:3000/api/health"]
@@ -504,11 +603,11 @@ services:
 
 #   semaphore:
 #     <<: *no-search-domain
-#     image: git.thinforge.org/thinforge/thinforge-semaphore:latest
+#     image: git.thinforge.org/thinforge/thinforge-semaphore:release
 #     restart: unless-stopped
 #     ports:
 #       # Bind to 127.0.0.1 only — Semaphore is admin-internal (default-PW issue
-#       # F-HI-09); no LAN access. See docs/security-audit-2026-04-18.md F-CR-06.
+#       # F-HI-09); no LAN access. See docs/security/security-audit-2026-04-18.md F-CR-06.
 #       - "127.0.0.1:8888:3000"
 #     environment:
 #       SEMAPHORE_DB_DIALECT: sqlite
@@ -544,6 +643,7 @@ services:
     profiles:
       - multicast
     network_mode: host
+    logging: *default-logging
 
   bt-seeder:
     # Compose-Entry ist nur Image-Source + UI-Metadata. Der eigentliche
@@ -560,6 +660,7 @@ services:
     profiles:
       - bittorrent
     network_mode: host
+    logging: *default-logging
 
   cloner:
     labels:
@@ -574,6 +675,7 @@ services:
       - ${STORAGE_DIR:-./ThinForgeDaten}/cloning-vm:/input:ro
       - ${STORAGE_DIR:-./ThinForgeDaten}/clones:/output
     command: ["echo", "Use 'docker run' to execute cloning operations"]
+    logging: *default-logging
 
   cloning-vm:
     labels:
@@ -613,6 +715,7 @@ services:
       - KVM_ENABLED=${CLONING_VM_KVM_ENABLED:-true}
     depends_on:
       - backend
+    logging: *default-logging
 
 volumes:
   acceptance_cache:

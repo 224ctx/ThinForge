@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # bootstrap-release.sh — One-shot deployment of ThinForge from the
 # pre-built container images in the Gitea registry. Run once on a fresh
-# Debian/Ubuntu host.
+# Ubuntu host (recommended and tested: Ubuntu Server 24.04 LTS). On Debian,
+# install Docker with the Compose plugin by hand first — install-deps.sh adds
+# Docker's apt source for Ubuntu only.
 #
 # Usage:
 #   ./bootstrap-release.sh                   # default target: ~/ThinForge-Release

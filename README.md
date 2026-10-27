@@ -110,7 +110,7 @@ git pull
 
 Schema changes for an **existing** database are applied by `thinforge-migrate` when the backend container starts. `migrations/0001_initial.sql` is run by `initdb` only on the first start of an empty database.
 
-If the update brings a new agent binary, sign it again afterwards — see the next section.
+If the update brings a new agent binary, the backend signs it when `deploy.sh` restarts it — see the next section.
 
 ---
 
@@ -118,8 +118,8 @@ If the update brings a new agent binary, sign it again afterwards — see the ne
 
 This repository ships `agent-go/bin/thinforge-agent-amd64` and `agent-version` **without** a signature: every server signs the binary with its own Minisign key, and no `.minisig` is ever shipped. After a `git pull` that replaces the binary:
 
-1. Run `./deploy.sh` (or just `git pull` — the backend reads the file on every agent download).
-2. In the web interface, go to **Clients → Agent → Re-sign**. Without a new signature the Tools-ISO build and the VM start are rejected with 409, and the devices discard the update.
+1. Run `./deploy.sh`. It restarts the backend, which checks the signature on every start and signs the binary again with this server's key when it no longer matches. A `git pull` alone is not enough: until the backend restarts, the old signature stays next to the new binary and the devices discard the update.
+2. Check **Clients → Agent**: it should show the new version as signed. If it shows "Not signed" (no signing key yet, or minisign failed; the reason is in the backend log), click **Sign** there and confirm with your password or a two-factor code. Until then the Tools-ISO build and the VM start are rejected with 409.
 
 The devices then fetch the new version on their own (checked when the agent starts and every five minutes).
 

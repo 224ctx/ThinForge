@@ -131,7 +131,10 @@ sudo mkdir -p "${STORAGE_DIR}/grafana"    && sudo chown 472:0       "${STORAGE_D
 sudo mkdir -p "${STORAGE_DIR}/vulnerability-scans/sbom" "${STORAGE_DIR}/vulnerability-scans/grype"
 sudo chown -R "$(id -u):$(id -g)" "${STORAGE_DIR}/vulnerability-scans"
 
-# NFS exports must be a file, not a directory
+# NFS exports must be a file, not a directory. Seit Runde 6 haengt der
+# nfs-server das Verzeichnis nfs-config ein und verlinkt /etc/exports auf diese
+# Datei (sie muss beim Start da sein); ein Verzeichnis gleichen Namens stammt
+# aus dem frueheren Einzeldatei-Mount.
 if [ -d "${STORAGE_DIR}/nfs-config/exports" ]; then
   sudo rm -rf "${STORAGE_DIR}/nfs-config/exports"
 fi
