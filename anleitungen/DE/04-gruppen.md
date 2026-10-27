@@ -28,10 +28,10 @@ Jede Zeile zeigt Gruppenname, Anzahl direkt zugewiesener Clients und die Zahl de
 
 ### Aktionen pro Gruppe
 
-- **Details anzeigen** (Klick auf die Zeile) — Kennzahlen (Clients, übergeordnete Gruppe, Untergruppen), das jüngste Clone-Deployment dieser Gruppe mit Fortschritt und Knöpfen zum Abbrechen, Neustarten fehlgeschlagener Clients und Löschen, darunter die Tabelle **Enthaltene Clients** (Inventarnummer, Hostname, MAC-Adresse, Status, Raum; Klick öffnet das Gerät)
+- **Details anzeigen** (Klick auf die Zeile) — Kennzahlen (Clients, übergeordnete Gruppe, Untergruppen), das jüngste Clone-Deployment dieser Gruppe mit Fortschritt und Knöpfen zum Abbrechen, Neustarten fehlgeschlagener und abgebrochener Clients (erscheint, sobald mindestens ein Client fehlgeschlagen ist) und Löschen, darunter die Tabelle **Enthaltene Clients** (Inventarnummer, Hostname, MAC-Adresse, Status, Raum; Klick öffnet das Gerät)
 - **Image verteilen** — einen eigenen Knopf dafür hat die Gruppenansicht nicht mehr. Ein Deployment für die Gruppe legst du unter **Cloning → Deployments** mit dem Ziel „Gruppe" an ([06](06-rollouts.md)); die Gruppenansicht zeigt es dann an.
 - **Bearbeiten** — Namen, Beschreibung, übergeordnete Gruppe ändern
-- **Löschen** (nur Admins, Knopf im Bearbeiten-Formular) — klappt nur, solange die Gruppe keine Untergruppen und keine Clients hat; sonst lehnt der Server mit einer Meldung ab. Hängen noch Aufgabenvorlagen oder hochgeladene Zertifikate an der Gruppe, fragt die Oberfläche, ob erzwungen gelöscht werden soll — die Vorlagen werden dann abgeschaltet, die Zertifikate gelöscht. Ist die Gruppe Ziel eines Rollouts im Entwurf, aktiv oder pausiert, lässt sie sich gar nicht löschen. Gruppen mit aktiviertem VPN löscht der Dialog nach eigener Rückfrage erzwungen: Untergruppen rücken eine Ebene hoch, Clients werden „ungruppiert".
+- **Löschen** (nur Admins, Knopf im Bearbeiten-Formular) — eine leere Gruppe wird nach der üblichen Rückfrage gelöscht. Hängen noch Untergruppen, Clients, Aufgabenvorlagen oder hochgeladene Zertifikate an der Gruppe, nennt die Oberfläche alle Folgen und fragt, ob erzwungen gelöscht werden soll: Untergruppen rücken eine Ebene hoch, Clients werden „ungruppiert", Vorlagen werden abgeschaltet, Zertifikate gelöscht. (Bis zum Update vom 2026-10-03 lehnte der Server eine Gruppe mit Untergruppen oder Clients ohne VPN-Zugang ab, ohne dass sich das Löschen erzwingen ließ.) Ungruppierte Clients findet die Clients-Liste über den Gruppenfilter „Ohne Gruppe". Hängen Geräte mit aktivem VPN-Zugang an der Gruppe, löscht der Dialog nach eigener Rückfrage erzwungen: Untergruppen rücken eine Ebene hoch, Clients werden „ungruppiert". Hängen dazu Untergruppen, Aufgabenvorlagen oder hochgeladene Zertifikate an der Gruppe, fragt er vorher wie oben nach (bis zum Update vom 2026-10-02 übersprang der VPN-Weg diese Rückfrage). Die Rückfrage nennt alles davon zusammen, was an der Gruppe hängt.
 
 ## Neue Gruppe anlegen
 
@@ -66,7 +66,7 @@ Beim Anlegen lässt sich die Gruppe gleich mitgeben — im Formular **„Client 
 Die Gruppen-Zuordnung ist überall filterbar:
 
 - **Clients-Liste** — Dropdown „Gruppen" in der Filterzeile
-- **Deployments, Updates und Rollouts** — Ziel-Auswahl: Gruppe statt Client-Liste
+- **Deployments, Updates und Rollback** — Ziel-Auswahl: Gruppe statt Client-Liste
 - **Berichte** — Spalte Gruppe im Compliance-Bericht, Auslastung und Verteilung pro Gruppe im Bericht „Nutzung"
 
 ## Unter-Gruppen

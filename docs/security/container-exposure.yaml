@@ -90,8 +90,20 @@ services:
     # Klon-Deployments und Aufnahme-Jobs nicht mehr in den per-MAC-Skripten
     # unter deploy-scripts/, sondern wird von dort zur Laufzeit über einen
     # IP-geprüften Endpunkt geholt (`…/callback-token`).
+    #
+    # BEKANNTE GRENZE dieser Regel (Daisy 2026-09-30, bewusst so belassen):
+    # das BitTorrent-Unterverzeichnis `bt-<bt_secret>` steht weiter im
+    # per-MAC-Deploy-Skript (`pxe_service::try_set_bittorrent_deploy_boot`),
+    # und opentracker läuft ohne Whitelist. Wer im Rollout-Netz die MAC eines
+    # Geräts mit laufendem BT-Deployment kennt, kann das Abbild mitlesen.
+    # Das ist kein zusätzlicher Verlust: ein Multicast-Deployment ist im
+    # selben Netz für jeden Teilnehmer ebenso mitlesbar, und der Klon selbst
+    # liegt per NFS/HTTP im selben Netz. Die Schutzannahme ist deshalb das
+    # isolierte Rollout-Netz (docs/security/pxe-boot-security.md §5), nicht
+    # das Geheimnis im Skript. Eine Ausgabe über einen IP-geprüften Endpunkt
+    # wie beim callback-token wurde geprüft und nicht gebaut.
     network: external
-    notes: "DNS für Remote-VPN-Peers über Overlay (zusätzlich DHCP/PXE im Client-LAN); TFTP-Root ohne Zugangsprüfung → keine Geheimnisse dort"
+    notes: "DNS für Remote-VPN-Peers über Overlay (zusätzlich DHCP/PXE im Client-LAN); TFTP-Root ohne Zugangsprüfung → keine Geheimnisse dort. Bekannte Grenze: bt_secret im Deploy-Skript — Schutz ist das isolierte Rollout-Netz (2026-09-30)"
 
   # ===========================================================================
   # lan — Listener im Client-/Management-LAN, aber nicht über das Overlay.
@@ -192,6 +204,12 @@ services:
     #   3. hostfwd=tcp:127.0.0.1:2222-:22         (SSH in den Gast)
     # Fällt eine davon weg, ist guest_escape_only hier falsch und muss
     # gestrichen werden.
+    #
+    # Der QMP-Monitor für das saubere Herunterfahren (seit 2026-10-01,
+    # Runde 5, T474) ist KEIN vierter Listener: ein UNIX-Socket unter
+    # /run/thinforge-vm im Container, weder im Host-Netz noch im geteilten
+    # Datenverzeichnis; erreichbar nur über `docker exec`. Wandert er je auf
+    # TCP oder in ein eingehängtes Verzeichnis, gilt dasselbe wie oben.
     network: lan
     guest_escape_only: true
     notes: "noVNC 6081 + VNC 5901 + QEMU-SSH-Forward 2222 alle loopback-gebunden, extern nur via Caddy /novnc/*; QEMU-Guests sind getrusted"
@@ -302,8 +320,11 @@ services:
   #   nfs-server  → lan
   #                 network_mode: host, privileged: true, profiles: [network];
   #                 exportiert clones und captures per NFS ins Client-LAN
-  #                 (PXE-/Imaging-Pfad); deltas ist nur noch eingebunden,
-  #                 der Export entfiel 2026-05-07 (Auslieferung per HTTPS).
+  #                 (PXE-/Imaging-Pfad); deltas ist seit 2026-09-30 auch
+  #                 nicht mehr eingebunden (der Export entfiel 2026-05-07,
+  #                 Auslieferung per HTTPS); nfs-config haengt seit
+  #                 2026-10-02 als Verzeichnis read-only unter
+  #                 /etc/thinforge-nfs.
   #
   # Nicht in dieser Datei, weil in beiden Compose-Dateien auskommentiert bzw.
   # entfernt: prometheus, grafana, semaphore (seit 2026-04-20 ausgebaut).

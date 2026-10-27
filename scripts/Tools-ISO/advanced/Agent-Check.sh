@@ -139,6 +139,26 @@ else
     bad "thinforge-agent missing or not executable: /data/thinforge/thinforge-agent"
 fi
 
+# Spur der Binary (Haertungspaket 2, V7): die geprueft Signatur neben der
+# Binary — der Agent prueft sich beim Start dagegen und holt sie sonst vom
+# Server; die vorige Binary als Rueckfall erscheint erst nach dem ersten
+# Self-Update ab v2.28.0. Beides Hinweise, kein FAIL (vor v2.28.0 fehlen sie).
+if [ -s /data/thinforge/thinforge-agent.minisig ]; then
+    ok "thinforge-agent.minisig present (signature next to the binary)"
+else
+    note "thinforge-agent.minisig missing — agent >= v2.28.0 fetches it from the server at start (self-check, recovery unit)"
+fi
+if [ -s /data/thinforge/thinforge-agent.prev ]; then
+    if [ -s /data/thinforge/thinforge-agent.prev.minisig ]; then
+        ok "thinforge-agent.prev present with its signature (fallback for the recovery unit)"
+    else
+        note "thinforge-agent.prev present WITHOUT .prev.minisig — the recovery unit will not use it"
+    fi
+fi
+if [ -s /data/thinforge/thinforge-agent.failed ]; then
+    note "thinforge-agent.failed present — the recovery unit rolled back a binary that failed to start (see binary_recovered on the server)"
+fi
+
 check_file /data/thinforge/agent.conf "agent.conf"
 if [ -f /data/thinforge/agent.conf ]; then
     server_url=$(awk -F= '/^[[:space:]]*server_url/ {gsub(/[[:space:]]/, "", $2); print $2}' /data/thinforge/agent.conf)
@@ -219,9 +239,16 @@ check_unit() {
     case "$active" in
         active) ok "$unit active" ;;
         inactive)
-            # apply-update ist oneshot — inactive ist normal solange kein Shutdown
+            # agent-apply-update ist oneshot mit RemainAfterExit=yes
+            # (advanced/agent-apply-update.service): nach dem Boot steht sie
+            # auf „active (exited)", und nur dann laeuft ihr ExecStop — das
+            # Anwenden des Updates — beim Herunterfahren. inactive heisst:
+            # beim naechsten Herunterfahren wird KEIN Update angewendet. Bis
+            # Runde 5 meldete das Skript genau diesen Zustand als normal.
+            # Direkt nach 1-create-client-management.sh ist das erwartbar:
+            # die Unit ist dort nur aktiviert, sie startet mit dem ersten Boot.
             if [ "$unit" = "agent-apply-update.service" ]; then
-                ok "$unit inactive (oneshot, normal)"
+                note "$unit inactive — no update is applied at shutdown until it is active (expected after boot: active (exited); right after installation it starts with the first boot). Start now: systemctl start $unit"
             else
                 note "$unit inactive (not running — may be intentional on base VM)"
             fi
@@ -234,11 +261,43 @@ check_unit() {
 check_unit thinforge-agent.service
 check_unit agent-apply-update.service
 
+# Gehaertete Unit und Recover-Unit (Haertungspaket 2, V6/V7) kommen ab Agent
+# v2.28.0 ueber agent-migrate.sh; davor ist ihr Fehlen richtig. Hinweis, kein FAIL.
+if grep -q '^Type=notify$' /etc/systemd/system/thinforge-agent.service 2>/dev/null; then
+    ok "thinforge-agent.service is the hardened unit (Type=notify, watchdog)"
+    if [ -s /etc/systemd/system/thinforge-agent-recover.service ]; then
+        ok "thinforge-agent-recover.service present (OnFailure fallback)"
+    else
+        note "thinforge-agent-recover.service missing although the hardened unit is installed — agent-migrate.sh writes it at the next agent start"
+    fi
+else
+    note "thinforge-agent.service is the classic unit (Type=simple) — expected before agent v2.28.0; the migration switches it with the agent version"
+fi
+
 # data.mount muss existieren, damit Requires=data.mount greift
 if systemctl list-units --all --type=mount 2>/dev/null | grep -q "^[[:space:]]*data\.mount"; then
     ok "data.mount von systemd erkannt"
 else
     bad "data.mount missing in systemd — agent service dependency not satisfied"
+fi
+
+# ── 5b. Journal dauerhaft auf /data (Haertungspaket 2, V15) ─────────────
+hdr "Journal"
+
+if [ -L /var/log/journal ] && [ "$(readlink /var/log/journal)" = "/data/log/journal" ]; then
+    ok "/var/log/journal -> /data/log/journal (survives subvolume swaps)"
+    if [ -d /data/log/journal ] && [ -n "$(ls -A /data/log/journal 2>/dev/null)" ]; then
+        ok "/data/log/journal holds journal files"
+    else
+        note "/data/log/journal is empty — journalctl --flush has not run yet"
+    fi
+else
+    note "/var/log/journal is not a symlink to /data/log/journal — the journal is lost at the next subvolume swap (agent-migrate.sh >= 2026-10-22 moves it)"
+fi
+if grep -qs '^Storage=persistent$' /etc/systemd/journald.conf.d/thinforge.conf; then
+    ok "journald drop-in: Storage=persistent"
+else
+    note "journald drop-in /etc/systemd/journald.conf.d/thinforge.conf missing or without Storage=persistent"
 fi
 
 # ── 6. SSH (Server-Key + sshd) ───────────────────────────────────────

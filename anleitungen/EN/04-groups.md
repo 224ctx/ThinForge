@@ -1,12 +1,12 @@
 # 4 — Groups
 
-Groups are the primary organisation tool for the client fleet. Typical reasons to group clients:
+Groups are the primary organization tool for the client fleet. Typical reasons to group clients:
 
 - **Location** — Branch A, Branch B, HQ
 - **Role** — POS, training, back office, info kiosk
 - **Hardware generation** — different image variants for old vs. new devices
 - **Rollout waves** — pilot, early adopter, broad rollout
-- **VPN reach** — clients on the local LAN vs. clients connecting via the VPN (field service, home office, branch-office kiosks). The group's VPN flag decides which devices can be activated in the VPN menu; clone deployments run on the LAN only, VPN clients receive delta updates ([06](06-rollouts.md#rollouts-and-vpn)).
+- **VPN reach** — clients on the local LAN vs. clients connecting via the VPN (field service, home office, branch-office kiosks). The group's VPN flag decides which devices can be activated in the VPN menu ([13](13-vpn.md)); clone deployments run on the LAN only, VPN clients receive delta updates ([06](06-rollouts.md#rollouts-and-vpn)).
 
 A client belongs to **at most one** group. Groups can be nested (parent / child), which enables "Branch A → POS" for example.
 
@@ -28,10 +28,10 @@ Each row shows the group name, the number of directly assigned clients and the n
 
 ### Per-group actions
 
-- **Show details** (click the row) — key figures (clients, parent group, subgroups), the group's most recent clone deployment with progress and buttons to cancel, restart failed clients and delete, and below it the **Contained Clients** table (inventory number, hostname, MAC address, status, room; clicking opens the device)
+- **Show details** (click the row) — key figures (clients, parent group, subgroups), the group's most recent clone deployment with progress and buttons to cancel, restart failed and cancelled clients (shown as soon as at least one client has failed) and delete, and below it the **Contained Clients** table (inventory number, hostname, MAC address, status, room; clicking opens the device)
 - **Distribute an image** — the group view no longer has a button for this. Create a deployment for the group under **Cloning → Deployments** with the target "group" ([06](06-rollouts.md)); the group view then shows it.
 - **Edit** — rename, change description, move parent
-- **Delete** (admins only, button in the edit form) — only works while the group has no subgroups and no clients; otherwise the server refuses with a message. If task templates or uploaded certificates are still attached, the interface asks whether to force the deletion — the templates are then switched off and the certificates deleted. A group that is the target of a draft, active or paused rollout cannot be deleted at all. Groups with VPN enabled are force-deleted after their own confirmation: subgroups move up one level, clients become "ungrouped".
+- **Delete** (admins only, button in the edit form) — an empty group is deleted after the usual confirmation. If subgroups, clients, task templates or uploaded certificates are still attached, the interface lists every consequence and asks whether to force the deletion: subgroups move up one level, clients become "ungrouped", templates are switched off, certificates deleted. (Until the update of 2026-10-03 the server refused a group with subgroups or clients without VPN access, and the deletion could not be forced.) Ungrouped clients can be found in the client list with the group filter "No group". If devices with active VPN access belong to the group, the dialog force-deletes it after its own confirmation: subgroups move up one level, clients become "ungrouped". If subgroups, task templates or uploaded certificates are attached as well, it asks first as described above (until the update of 2026-10-02 the VPN path skipped that question). The question names everything of that kind that is attached.
 
 ## Creating a new group
 
@@ -66,12 +66,12 @@ The group can also be set when creating clients — in the **"Register Client"**
 The group assignment is filterable throughout:
 
 - **Clients list** — "Groups" dropdown in the filter row
-- **Deployments, updates and rollouts** — target selection: group instead of client list
-- **Reports** — group column in the compliance report, utilisation and distribution per group in the "Usage" report
+- **Deployments, updates and rollback** — target selection: group instead of client list
+- **Reports** — group column in the compliance report, utilization and distribution per group in the "Usage" report
 
 ## Sub-groups
 
-Sub-groups are purely **organisational** (tree view, filtering). An action — e.g. a rollout — applies **only to the clients directly assigned to the selected group** and is **not** propagated to sub-groups.
+Sub-groups are purely **organizational** (tree view, filtering). An action — e.g. a rollout — applies **only to the clients directly assigned to the selected group** and is **not** propagated to sub-groups.
 
 To reach a parent group together with its sub-groups, select the groups individually or use a client list.
 

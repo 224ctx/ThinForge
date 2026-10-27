@@ -4,7 +4,7 @@ This directory contains the **complete, corresponding source code** for the GPL 
 
 ## What is here and why
 
-Only GPL-licensed components whose **binaries** are shipped by ThinForge's distribution (container images pushed to the registry, tools-ISO, etc.) have their source kept in this directory. Components that ThinForge merely references or orchestrates (without shipping binaries) have source pointers in `../LICENSES/` instead — see "Not shipped" below.
+Only GPL-licensed components whose **binaries** are shipped by ThinForge's distribution (container images pushed to the registry, tools-ISO, etc.) have their source kept in this directory. Components that ThinForge merely references or orchestrates (without shipping binaries) have source pointers in `../LICENSES/` instead — see "Not shipped" below. The GPL- and LGPL-licensed **Alpine packages** inside the images are shipped as well, but their source is not mirrored here: the written offer covers them — see "Shipped as Alpine packages" below.
 
 ### Current — corresponds to what today's images ship
 
@@ -27,7 +27,7 @@ for images already shipped stays here. Do not delete these.
 | `partclone-0.3.40-r0-alpine3.23.tar.gz` | Alpine `community/partclone` **0.3.40-r0** — upstream tree 0.3.40 **plus the five aports patches** (`byteswap`, `gcc14`, `musl`, `remove-usage-of-off64_t`, `very-funny-glibc-types`) and the `APKBUILD` that applies them | releases `v2026.07.19` … `v2026.07.21` (Alpine 3.23 base) |
 | `ezio-2.0.29.tar.gz` | EZIO upstream release tag **v2.0.29** (2026-08-05) | every EZIO-bearing image between the 2026-08-25 rebuild and the v2.0.30 bump on 2026-08-29 — including the `:beta` images pushed on 2026-08-29 |
 | `ezio-v2.0.23-11-g4414248.tar.gz` | EZIO at upstream commit `4414248` — the state every image up to 2026-08-25 was actually built from | all EZIO-bearing images before the v2.0.29 rebuild |
-| `partclone-0.3.33.tar.gz` | Alpine `community/partclone` 0.3.33 | **no registry release found.** The registry starts at `v2026.07.19`, which already carried 0.3.40. Retained in case a pre-registry artefact was ever handed out. |
+| `partclone-0.3.33.tar.gz` | Alpine `community/partclone` 0.3.33 | **no registry release found.** The registry starts at `v2026.07.19`, which already carried 0.3.40. Retained in case a pre-registry artifact was ever handed out. |
 | `ezio-snapshot.tar.gz` | tree at ThinForge commit `7faaa45` (2026-04-17) | **nothing.** See the correction below. |
 
 > **Correction, 2026-08-25.** Until this date the two files at the bottom of
@@ -67,6 +67,19 @@ b5ebae1dd3763d8dc719835e46c4517419692f66e7748050faab38f8761d4719  partclone-0.3.
 `scripts/release-sync-licenses.sh` verifies these; keep every line in the plain
 `<sha256>  <filename>` form so its grep keeps matching all of them.
 
+## Shipped as Alpine packages — covered by the written offer (no tarball here)
+
+The Alpine-based images also carry GPL- and LGPL-licensed **Alpine packages** — installed via `apk add` in the Dockerfiles under `../docker/`, or brought along by the `alpine:3.24` base layer (`busybox`, `apk-tools`, …): for example `udpcast`, `btrfs-progs`, `dnsmasq`, `util-linux`, `qemu`, `grub`, `parted`. These binaries **are** distributed by ThinForge inside its images; they are unmodified upstream Alpine packages.
+
+Their source is not mirrored in this directory. Instead, the written offer in [`../WRITTEN_OFFER.md`](../WRITTEN_OFFER.md) (GPL v2 §3(b) / GPL v3 §6(b)) covers every one of them without condition — which image carries which package is listed there and in [`../THIRD_PARTY_LICENSES.md`](../THIRD_PARTY_LICENSES.md). The corresponding source of such a package is the Alpine `aports` recipe for the exact installed version (`APKBUILD`, patches, upstream archive): https://pkgs.alpinelinux.org/packages and https://gitlab.alpinelinux.org/alpine/aports. Read the installed versions and licenses out of the image:
+
+```bash
+docker run --rm --network none --entrypoint sh thinforge-cloner:latest -c 'apk list --installed'
+# → e.g. "btrfs-progs-6.17.1-r1 x86_64 {btrfs-progs} (GPL-2.0-or-later) [installed]"
+```
+
+Until 2026-10-01 this README listed these packages under "Not shipped" — wrong, since the binaries are inside the images; at the time, the written offer covered them only "should upstream sources become unavailable".
+
 ## Not shipped — pointer-only (no source tarball here)
 
 ThinForge does **not** ship binaries for the following components. They are downloaded / built on the ThinForge server at install time, or referenced only. GPL §3 source-with-binary obligations do not apply to ThinForge for these.
@@ -75,7 +88,6 @@ ThinForge does **not** ship binaries for the following components. They are down
 |-----------|--------------------|
 | **Clonezilla Live** | The ThinForge server downloads the ISO from SourceForge at install time via the ThinForge UI. ThinForge is a downloader / orchestrator, not a distributor of Clonezilla binaries. The ISO itself contains its own source. Upstream: https://clonezilla.org/ |
 | **DRBL** | Not installed into any ThinForge container image. Only referenced in documentation / architecture. Upstream: https://drbl.org/ |
-| **Alpine base packages** (`btrfs-progs`, `dnsmasq`, `qemu-img`, `util-linux`, `udpcast`, …) | Installed via `apk add` from Alpine community / main. Unmodified upstream packages. Source: https://pkgs.alpinelinux.org/packages and https://gitlab.alpinelinux.org/alpine/aports |
 
 ## Regenerating / updating source tarballs
 

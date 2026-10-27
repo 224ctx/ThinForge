@@ -4,6 +4,10 @@
 #
 # dnsmasq invocation: script $ACTION $MAC $IP [$HOSTNAME]
 #   ACTION ∈ {add, old, del}
+# plus DNSMASQ_TIME_REMAINING in the environment: seconds until the lease
+# expires (unset for del and for infinite leases). Forwarded as "remaining";
+# the backend books it into the lease history (dhcp_leases) as the expiry
+# known at this event. dnsmasq does not call the script on renewals.
 #
 # Authentication: network isolation. The backend endpoint is on
 # 127.0.0.1:8000, Caddy refuses /api/v1/dhcp/* on :80, and this container
@@ -20,6 +24,11 @@ ACTION="${1:-}"
 MAC="${2:-}"
 IP="${3:-}"
 HOSTNAME="${4:-}"
+# Digits only — anything else (unset, empty) is sent as "" and ignored.
+case "${DNSMASQ_TIME_REMAINING:-}" in
+  ''|*[!0-9]*) REMAINING="" ;;
+  *)           REMAINING="$DNSMASQ_TIME_REMAINING" ;;
+esac
 
 BACKEND_URL="${THINFORGE_BACKEND:-http://127.0.0.1:8000}"
 
@@ -36,7 +45,7 @@ BACKEND_URL="${THINFORGE_BACKEND:-http://127.0.0.1:8000}"
     --tries=1 \
     --timeout=5 \
     --header="Content-Type: application/json" \
-    --post-data="{\"mac\":\"$MAC\",\"ip\":\"$IP\",\"action\":\"$ACTION\",\"hostname\":\"$HOSTNAME\"}" \
+    --post-data="{\"mac\":\"$MAC\",\"ip\":\"$IP\",\"action\":\"$ACTION\",\"hostname\":\"$HOSTNAME\",\"remaining\":\"$REMAINING\"}" \
     -O /dev/null \
     "$BACKEND_URL/api/v1/dhcp/lease-event" 2>/dev/null || true
 ) &

@@ -15,11 +15,17 @@ Diese Anleitung richtet sich an **IT-Administrator:innen**, die ThinForge über 
 | Image an mehrere Gruppen gleichzeitig | [workflows/multi-group-deployment.md](workflows/multi-group-deployment.md) |
 | Problem beheben | [workflows/client-rollback.md](workflows/client-rollback.md), [08 — Tasks & Logs](08-tasks-logs.md) |
 | 2FA aktivieren / Passwort wechseln | [10 — Profil & 2FA](10-profil-und-2fa.md) |
-| Lizenz verlängern / hochladen | [11 — Lizenzierung](11-lizenz.md) |
+| Abonnement verlängern / hochladen | [11 — Abonnement](11-lizenz.md) |
 | CVE-Status / TLS / Signing-Key prüfen | [12 — Sicherheit](12-sicherheit-und-cve-scan.md) |
 | VPN für Homeoffice-Zugriff einrichten | [13 — VPN](13-vpn.md) |
+| Datenschutz-Angaben zusammenstellen (Verzeichnis der Verarbeitungstätigkeiten, Auskunft) | [14 — Datenschutz](14-datenschutz.md) |
+| Firmenfirewall für ThinForge einrichten (Ports, Hostnamen) | [15 — Firewall-Regeln](15-firewall.md) |
 
 ## Inhaltsverzeichnis
+
+**Voraussetzungen**
+
+15. [Firewall-Regeln](15-firewall.md) — Ports, Richtungen und Hostnamen für Verwaltungsnetz, Client-Netz, Internet und VPN; vor der Installation an der Firmenfirewall freischalten
 
 **Grundlagen**
 1. [Erste Schritte](01-erste-schritte.md) — Anmelden, Setup-Wizard, UI-Tour
@@ -36,14 +42,15 @@ Diese Anleitung richtet sich an **IT-Administrator:innen**, die ThinForge über 
 
 7. [Netzwerk](07-netzwerk.md) — DHCP/PXE, DNS, VPN (Grundlagen)
 8. [Tasks & Logs](08-tasks-logs.md) — Jobs, Protokolle, Diagnose
-9. [Einstellungen](09-einstellungen.md) — Dienste, TLS, Benutzer, Signierung, Lizenz-Überblick
+9. [Einstellungen](09-einstellungen.md) — Dienste, TLS, Benutzer, Signierung, Abonnement-Überblick
 
 **Erweitert (Admin)**
 
 10. [Profil & 2FA](10-profil-und-2fa.md) — Eigenes Passwort, TOTP-Setup, Passwort vergessen
-11. [Lizenzierung](11-lizenz.md) — VPN-Sitzplätze, Bundle-Upload, Limit-Verhalten
-12. [Sicherheit](12-sicherheit-und-cve-scan.md) — TLS, SSH-Provisioning-Keys, Signing-Key, Vulnerability-Scan, SBOMs
+11. [Abonnement](11-lizenz.md) — VPN-Sitzplätze, Upload der Abonnementdatei, Limit-Verhalten
+12. [Sicherheit](12-sicherheit-und-cve-scan.md) — TLS, SSH-Provisioning-Keys, Signing-Key, Vulnerability-Scan, SBOMs, ausgehende Verbindungen
 13. [VPN](13-vpn.md) — ThinVPN-Setup, Aktivierung von Homeoffice-Clients
+14. [Datenschutz](14-datenschutz.md) — Gespeicherte Daten, Aufbewahrung, Sichtbarkeit, Löschen und Export
 
 **Workflows (End-to-End)**
 
@@ -70,12 +77,12 @@ Diese Anleitung richtet sich an **IT-Administrator:innen**, die ThinForge über 
 
 ## Rollen im System
 
-- **Admin** — voller Zugriff. Zusätzlich zum Operator: Benutzerverwaltung, TLS, Signing-Keys, Factory-Reset, das Löschen von Clients und Gruppen, **die gesamte Netzwerk-Infrastruktur** (DHCP, DNS, PXE, Server-Interfaces) und **die Steuerung der Dienste** (Container starten/stoppen/neu starten)
+- **Admin** — voller Zugriff. Zusätzlich zum Operator: Benutzerverwaltung, TLS, Signing-Keys, Abonnement, Backup & Restore, Factory-Reset, das Speichern der Einstellungen (Wartungsfenster pflegt auch der Operator), das Löschen von Clients und Gruppen, **die gesamte Netzwerk-Infrastruktur** (DHCP, DNS, PXE, Server-Interfaces), **die Steuerung der Dienste** (Container starten/stoppen/neu starten) und das Menü **Logs** (Audit-Log und Container-Logs, [08](08-tasks-logs.md))
 - **Operator** — alltägliche Arbeit: Clients, Gruppen, Cloning, Capture-Jobs, Images, Rollouts, Tasks
-- **Viewer** — nur Lesen: Dashboard, Listen, Berichte
+- **Betrachter** — nur Lesen: Dashboard, Listen, Berichte
 
 Jeder darf für sich selbst das Passwort ändern und die Zwei-Faktor-Anmeldung ein- oder ausschalten — unabhängig von der Rolle ([10 — Profil & 2FA](10-profil-und-2fa.md)).
 
 Diese Anleitung geht von der **Operator**-Sicht aus. Admin-spezifische Tätigkeiten sind in [09 — Einstellungen](09-einstellungen.md) zusammengefasst; die Netzwerk-Einstellungen in [07 — Netzwerk](07-netzwerk.md) sind seit 2026-08-31 ebenfalls Admin-Sache.
 
-> **Menü sichtbar heißt nicht Aktion erlaubt.** Die Oberfläche blendet die meisten Schaltflächen nicht rollenabhängig aus. Ein Operator sieht also beispielsweise die Netzwerk- und Dienste-Ansichten samt Buttons; ein Klick darauf wird vom Server abgewiesen und die Oberfläche zeigt eine Fehlermeldung. Das ist kein Defekt, sondern die Rollenprüfung, die seit 2026-08-31 durchgängig auf dem Server sitzt statt nur in der Anzeige.
+> **Menü sichtbar heißt nicht Aktion erlaubt.** Die Rollenprüfung sitzt seit 2026-08-31 durchgängig auf dem Server. Die reinen Admin-Aktionen blendet die Oberfläche seit dem Update vom 2026-09-30 für andere Rollen aus: die Netzwerk-Ansicht ist dann schreibgeschützt, in den Diensten fehlen Start/Stopp, die Reiter Abonnement und Werkeinstellungen fehlen, und im Ersteinrichtungs-Assistenten übernimmt nur ein Admin den Clonezilla-Download (Betrachter sehen den Assistenten gar nicht). Seit dem Update vom 2026-10-08 fehlen außerdem die Reiter, deren Inhalt die Rolle nicht einmal lesen darf: **Backup & Restore** (Info & Backup) und **Zertifikate** (Clients) für alle außer Admins, **Remote Desktop** und **SSH-Zugang** (Einstellungen) sowie **Agent** (Clients) für Betrachter. Ebenso sind ohne Admin-Rolle die Einstellungen **Allgemein** und **Benachrichtigungen** schreibgeschützt, und Erzeugen, Hochladen, Rotieren und Nachsignieren von Zertifikaten und Schlüsseln fehlen; Betrachter sehen auch keine Knöpfe zum Bestätigen oder Lösen von Vorfällen. Clients und Gruppen löschen, **Token neu ausstellen**, **Reset auf Install Token** und **Agent signieren** zeigt die Oberfläche nur Admins, und die Agent-Einstellungen sind für Operatoren schreibgeschützt. Wo die Oberfläche eine Aktion noch zeigt, die die Rolle nicht erlaubt, weist der Server sie ab und die Oberfläche zeigt eine Fehlermeldung — das ist kein Defekt, sondern die Rollenprüfung.

@@ -42,6 +42,8 @@ Clean shutdown from within the VM. The **Create VM** card shows **Stopped**.
 
 The delta usually takes 1–5 minutes (step 1/2), then the full clone is created (step 2/2). The delta is computed against the previous version, stored on the server and signed if a signing key exists. It appears under **Cloning → Updates** in the **Update Chain**.
 
+**Taking a delta to another server:** In the Update Chain, a delta's download button saves it as a 7z archive, optionally encrypted with a password (at least 4 characters, ASCII characters only). On the other server, the import button in the Update Chain header reads the archive in: after you pick the file, a dialog asks for the password — only for an encrypted export, otherwise leave the field empty (since the update of 2026-10-08; before that the import did not ask for it, and a delta exported with encryption could not be read back in). If the import fails, for example because of a wrong password, the dialog stays open with the selected file. The server re-signs the imported delta with its own signing key (without a key the import fails); like any other delta, it only reaches devices through a released assignment.
+
 ## Step 5 — Pilot assignment
 
 First on a few test clients:
@@ -57,11 +59,11 @@ Expanded, the assignment shows each client's status, with progress, rate and byt
 
 ## Step 6 — Verify the pilot
 
-Minimum check-list:
+Minimum checklist:
 
 - [ ] Clients rebooted and are back online
 - [ ] Agent running (`systemctl status thinforge-agent` via the terminal)
-- [ ] **Installed Image** column shows `v2026.06.22-005`
+- [ ] **Installed Version** column shows `v2026.06.22-005`
 - [ ] User-side nothing obviously wrong (apps start, network works, printers work)
 - [ ] No client in the assignment on **Failed** or **Signature invalid**
 
@@ -78,7 +80,7 @@ When the pilot is solid:
 5. Optionally **"Notify user"** as in the pilot
 6. **"Add"**, then **"Release"**
 
-A client can only be part of one open assignment; clients still in another one are skipped. How many clients download at the same time and with how much bandwidth is set in the **Bandwidth settings** (cog in the update chain).
+A client can only be part of one open assignment; clients still in another one are skipped. How many clients download at the same time and within which limits (maximum and minimum bandwidth per client) is set in the **Bandwidth settings** (cog in the update chain); within these limits the agent adapts the bandwidth to the link by itself while downloading.
 
 ## Step 8 — Monitor progress
 
@@ -96,7 +98,7 @@ In the **Assignments** table:
 
 Once all clients have reached a final status, the assignment switches to **Completed**. Final check:
 
-- Find deviators in the clients list via the **Installed Image** column and deal with them individually
+- Find deviators in the clients list via the **Installed Version** column and deal with them individually
 - In the **Clones** tab, the expanded row of a version lists the clients still below it
 
 ## Pitfalls

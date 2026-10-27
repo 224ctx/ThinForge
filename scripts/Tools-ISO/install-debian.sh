@@ -12,6 +12,8 @@
 #
 #   NACHHER (nach dem Calamares-Installer, im installierten System):
 #     sudo bash install-debian.sh finish [--server=https://...]
+#     (--server setzt nur die Zeitquelle der VM; die Server-URL des Agents
+#      kommt immer aus advanced/server_url der Tools-ISO)
 #     → GRUB mit ThinForge Boot-Logik
 #     → ThinForge Agent installieren
 #
@@ -277,7 +279,7 @@ do_finish() {
     # grub-btrfsd DEAKTIVIEREN
     systemctl disable grub-btrfsd.service 2>/dev/null || true
     systemctl stop grub-btrfsd.service 2>/dev/null || true
-    log "grub-btrfsd disabled (GRUB is updated by agent-apply-delta.sh)"
+    log "grub-btrfsd disabled (GRUB is updated by the agent when it applies an update)"
 
 
     # overlayfs in initramfs aktivieren — ermoeglicht das Booten von
@@ -397,7 +399,10 @@ RUNTIMEEOF
     # NetBird-Repo wird hier nicht eingebunden — NetBird wird unten via
     # offiziellem Install-Skript installiert (Tools-ISO-Live-System hat
     # Internet; der spätere Klon-Betrieb läuft im LAN ohne Internet).
-    local EXTRA_PKGS=(nfs-common zstd curl jq python3 x11-utils minisign chrony zenity yad)
+    # tpm2-tools: der Agent liest den TPM-Zustand ueber `tpm2_getcap`
+    # (agent-go/internal/tpm/tpm.go::Present); ohne das Paket meldet er
+    # auch auf Geraeten mit TPM "kein TPM" (tpm_present=false).
+    local EXTRA_PKGS=(nfs-common zstd curl jq tpm2-tools python3 x11-utils minisign chrony zenity yad)
     local TO_INSTALL=()
 
     for pkg in "${EXTRA_PKGS[@]}"; do
@@ -498,10 +503,18 @@ NTPCONF
 
     # ── SSH-Server installieren (Key kommt vom Agent) ──────────────
 
+    # Ungeschuetzt beendete ein nicht erreichbares Repo hier do_finish unter
+    # `set -e` (wie beim dist-upgrade, T417) — Agent, SSH-Haertung, Update,
+    # initramfs und Branding blieben dann aus. Jetzt Warnung statt Abbruch;
+    # 1-create-client-management.sh versucht openssh-server ohnehin erneut.
     if ! command -v sshd &>/dev/null; then
         log "Installing openssh-server..."
-        apt-get update -qq
-        apt-get install -y -qq openssh-server
+        apt-get update -qq || warn "apt-get update failed — package sources may not be reachable"
+        if apt-get install -y -qq openssh-server; then
+            log "openssh-server installed."
+        else
+            warn "openssh-server could not be installed — the agent setup tries again."
+        fi
     fi
     # Noch NICHT konfigurieren oder neustarten — der Agent installiert
     # zuerst den SSH-Key, dann wird sshd sicher konfiguriert.
@@ -526,9 +539,10 @@ NTPCONF
 
     if [ -f "$INSTALL_SCRIPT" ]; then
         log "Agent script found on ISO: $INSTALL_SCRIPT"
-        if [ -n "$THINFORGE_SERVER" ]; then
-            export THINFORGE_SERVER
-        fi
+        # Kein THINFORGE_SERVER-Export mehr: 1-create-client-management.sh
+        # liest die Server-URL nur aus advanced/server_url der ISO und hat die
+        # Variable nie ausgewertet. --server setzt allein die Zeitquelle
+        # (NTP-Schritt oben).
         bash "$INSTALL_SCRIPT"
     else
         # Curl-Bootstrap-Modus wurde aus Sicherheitsgruenden entfernt
@@ -558,7 +572,15 @@ NTPCONF
     fi
     systemctl enable ssh 2>/dev/null || true
     systemctl restart ssh 2>/dev/null || true
-    log "SSH key-only auth enabled"
+    # Erfolg nur melden, wenn sshd wirklich laeuft — ohne openssh-server
+    # stand hier und im Banner bisher trotzdem "Key-only auth enabled".
+    if [ -f /etc/ssh/sshd_config ] && systemctl is-active --quiet ssh 2>/dev/null; then
+        SSH_ENABLED=1
+        log "SSH key-only auth enabled"
+    else
+        SSH_ENABLED=0
+        warn "SSH is not running (openssh-server missing or not started) — the server cannot reach this machine via SSH."
+    fi
 
     # ── System auf den neuesten Stand bringen ────────────────────────
 
@@ -627,7 +649,11 @@ NTPCONF
     echo ""
     echo -e "  GRUB:       ThinForge boot logic with rollback"
     echo -e "  Agent:      Installed"
-    echo -e "  SSH:        Key-only auth enabled"
+    if [ "${SSH_ENABLED:-0}" = "1" ]; then
+        echo -e "  SSH:        Key-only auth enabled"
+    else
+        echo -e "  SSH:        ${YELLOW}NOT running${NC} (openssh-server missing or not started)"
+    fi
     echo -e "  Data:       /data mounted"
     # Nicht behaupten, was nicht stimmt: bei fehlgeschlagenem dist-upgrade
     # stand hier bisher trotzdem "Updated".
@@ -640,7 +666,8 @@ NTPCONF
     echo -e "  ${YELLOW}Next steps:${NC}"
     echo -e "  1. Customize system (drivers, software, configuration)"
     echo -e "  2. Shut down the VM"
-    echo -e "  3. In ThinForge UI: 'Save update' → version v1.0"
+    echo -e "  3. In the ThinForge UI: 'Save update delta & create clone' — the first run"
+    echo -e "     creates the baseline; the version (vYYYY.MM.DD-NNN) is assigned automatically"
     echo -e "  4. Deploy clone to clients"
     echo ""
 }
@@ -681,6 +708,8 @@ case "$ACTION" in
         echo "Usage:"
         echo "  install-debian.sh prepare /dev/vda       Check disk layout + configure Calamares"
         echo "  install-debian.sh finish [--server=URL]  Set up GRUB + agent (after installer)"
+        echo "      --server=URL only sets the VM's NTP time source (the host of the URL);"
+        echo "      the agent's server URL always comes from advanced/server_url on the Tools-ISO."
         echo ""
         echo "Workflow:"
         echo "  0. Click 'Create Base HD' in ThinForge UI (cloning VM card)"

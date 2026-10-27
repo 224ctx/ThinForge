@@ -3,22 +3,40 @@
 #
 # Bereitet eine VM für das Klonen vor. Läuft AUSSCHLIESSLICH im ISO-Modus:
 #
-#   mount /dev/sr1 /mnt && bash /mnt/1-create-client-management.sh
+#   mount /dev/sr1 /mnt && bash /mnt/advanced/1-create-client-management.sh
+#
+# (Das Skript liegt auf der ISO unter advanced/; die install-*.sh im
+# ISO-Wurzelverzeichnis rufen es in ihrem finish-Schritt selbst auf.)
 #
 # Die Tools-ISO ist die kanonische Provisioning-Quelle und enthält alle
 # benötigten Dateien (provisioning_key.pub, server_url, heartbeat_token,
-# server.crt, signing-pubkey, agent-binary samt minisign-Signatur, alle
-# Apply-Skripte). Das Agent-Binary wird vor dem Kopieren gegen den
+# server.crt, signing-pubkey, agent-binary samt minisign-Signatur, die
+# Hilfsskripte unter advanced/). Das Agent-Binary wird vor dem Kopieren gegen den
 # Signierschlüssel des Servers geprüft (Schritt 5). Der frühere
 # curl|bash-Bootstrap-Modus über die öffentliche API wurde entfernt — er
 # leakte das geteilte Heartbeat-Token und das Trust-Anchor-Material an
 # jeden LAN-Host. Siehe docs/security/security-audit-2026-04-18.md F-CR-01 + F-CR-05.
 #
 # Installiert:
-#   - SSH Public Key des Servers (für Ansible-Zugriff nach Deployment)
+#   - SSH Public Key des Servers (für den SSH-Zugang des Servers nach dem
+#     Deployment: Terminal, Befehle, Neustart, Inventur, Agent-Neuinstallation)
 #   - SSH-Server (openssh-server) mit Key-only Auth
 #   - ThinForge Agent (Go) + Token + Heartbeat
-#   - Delta-Update Scripts (apply-delta, apply-update, manage-snapshots)
+#   - Shutdown-Update-Dienst agent-apply-update.service; er ruft
+#     `thinforge-agent apply-update` (apply-delta/apply-update sind seit dem
+#     Go-Agent Unterbefehle des Binarys, keine Skripte mehr)
+#   - manual-manage-snapshots.sh
+#   - Remote-Desktop-Pakete ueber provision-remote-desktop.sh (x11vnc)
+#   - tpm2-tools, falls `tpm2_getcap` fehlt (TPM-Status im Heartbeat)
+#   - Journal dauerhaft unter /data/log/journal (Haertungspaket 2, V15)
+#
+# Die Agent-Unit kommt in zwei Fassungen (Haertungspaket 2, V6/V7): ab
+# Agent v2.28.0 die gehaertete (Type=notify, Watchdog, Capability-Grenzen,
+# OnFailure=thinforge-agent-recover.service), davor die bisherige. Welche,
+# sagt die `agent-version` der Tools-ISO (optional; fehlt sie, die bisherige
+# — die Migration zieht beim ersten Agent-Start nach). Die Texte stehen
+# byte-gleich in agent-go/*.service und agent-migrate.sh
+# (cloningvm_service::tools_iso_unit_tests).
 #
 set -u
 
@@ -29,7 +47,7 @@ set -u
 if [ ! -f "$0" ]; then
   echo "[setup] ERROR: Script must be executed as a file, not via curl|bash."
   echo "[setup] Expected usage:"
-  echo "[setup]   mount /dev/sr1 /mnt && bash /mnt/1-create-client-management.sh"
+  echo "[setup]   mount /dev/sr1 /mnt && bash /mnt/advanced/1-create-client-management.sh"
   exit 1
 fi
 
@@ -90,6 +108,28 @@ ensure_minisign() {
   command -v minisign >/dev/null 2>&1
 }
 
+# ── Hilfsfunktion: tpm2-tools bereitstellen ──────────────────────────
+# Der Agent liest den TPM-Zustand ueber `tpm2_getcap`
+# (agent-go/internal/tpm/tpm.go::Present); ohne das Paket meldet er auch auf
+# Geraeten mit TPM "kein TPM" (tpm_present=false). Die install-*.sh haben
+# tpm2-tools in ihrer Paketliste (EXTRA_PKGS); der Einzelaufruf dieses
+# Skripts auf einem bestehenden System bekam es bis Runde 6 nicht (T149).
+# Unabhaengig davon, ob DIESES System ein TPM hat: das Golden Image entsteht
+# oft in einer VM ohne TPM, die Klone laufen auf Hardware mit TPM.
+
+ensure_tpm2_tools() {
+  command -v tpm2_getcap >/dev/null 2>&1 && return 0
+  echo "[setup] Installing tpm2-tools..."
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq && apt-get install -y -qq tpm2-tools
+  elif command -v dnf >/dev/null 2>&1; then
+    dnf install -y -q tpm2-tools
+  elif command -v pacman >/dev/null 2>&1; then
+    pacman -Sy --noconfirm tpm2-tools
+  fi
+  command -v tpm2_getcap >/dev/null 2>&1
+}
+
 # ── Hilfsfunktion: Signatur des Agent-Binarys pruefen ────────────────
 # verify_agent_signature BINARY SIGNATUR PUBKEY-DATEI
 #
@@ -125,6 +165,17 @@ verify_agent_signature() {
     return 1
   fi
   echo "[setup] Agent binary signature verified"
+}
+
+# ── Hilfsfunktion: Versionstor der gehaerteten Unit ──────────────────
+# unit_hardened_for_version VERSION — 0, wenn die gehaertete Unit gilt
+# (Vergleich wie in agent-migrate.sh rein ueber sort -V).
+
+UNIT_HARDENED_FROM="v2.28.0"
+unit_hardened_for_version() {
+  local v="$1"
+  [ -n "${v}" ] || return 1
+  [ "$(printf '%s\n' "${UNIT_HARDENED_FROM}" "${v}" | sort -V | head -n1)" = "${UNIT_HARDENED_FROM}" ]
 }
 
 # ── 1. SSH-Key des Servers installieren ──────────────────────────────
@@ -314,6 +365,12 @@ if [ -f "${SCRIPT_DIR}/thinforge-agent" ]; then
     rm -f /data/thinforge/thinforge-agent.new 2>/dev/null
     exit 1
   fi
+  # Die geprueft Signatur neben die Binary (Haertungspaket 2, V7): der Agent
+  # prueft sich beim Start dagegen, die Recover-Unit braucht sie fuer .prev.
+  cp "${SCRIPT_DIR}/thinforge-agent.minisig" /data/thinforge/thinforge-agent.minisig \
+    && chmod 644 /data/thinforge/thinforge-agent.minisig \
+    && echo "[setup] Agent signature installed next to the binary" \
+    || echo "[setup] WARNING: could not copy thinforge-agent.minisig next to the binary"
   # Wenn der Service schon laeuft, restart damit der neue Inhalt aktiv wird.
   # Beim ersten Install ist der Service noch nicht aktiv -> is-active liefert
   # 'inactive' und wir ueberspringen den restart (das Enable + Start kommt
@@ -338,7 +395,70 @@ server_url = ${SERVER_URL:-https://thinforge-server}
 AGENTCONF
   echo "[setup] agent.conf written (server URL: ${SERVER_URL})"
 
-  cat > /etc/systemd/system/thinforge-agent.service <<AGENTSERVICE
+  # Zwei Fassungen der Unit, Tor ueber die agent-version der ISO (s. Kopf).
+  AGENT_VERSION_ISO=$(get_file "agent-version" 2>/dev/null | tr -d '[:space:]' || true)
+  if unit_hardened_for_version "${AGENT_VERSION_ISO}"; then
+    cat > /etc/systemd/system/thinforge-agent.service <<'AGENTUNIT_V2'
+[Unit]
+Description=ThinForge Agent (Heartbeat + Updates)
+After=network-online.target data.mount
+Wants=network-online.target
+Requires=data.mount
+StartLimitBurst=5
+StartLimitIntervalSec=300
+OnFailure=thinforge-agent-recover.service
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/data/thinforge/thinforge-agent
+Restart=always
+RestartSec=10
+WatchdogSec=120
+TimeoutStartSec=300
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID CAP_SETFCAP CAP_MKNOD CAP_AUDIT_WRITE CAP_SYS_CHROOT CAP_KILL CAP_SYS_PTRACE
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+TasksMax=512
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target
+AGENTUNIT_V2
+    cat > /etc/systemd/system/thinforge-agent-recover.service <<'RECOVERUNIT'
+[Unit]
+Description=ThinForge Agent Recovery (restores the signed previous binary, else retries in 5 min)
+After=data.mount
+Requires=data.mount
+
+[Service]
+Type=oneshot
+TimeoutStartSec=400
+ExecStart=/bin/bash -c ' \
+    set -u; D=/data/thinforge; B=$$D/thinforge-agent; P=$$B.prev; A=thinforge-agent.service; \
+    retry() { echo "agent-recover: retrying $$A in 5 min"; sleep 300; \
+        if systemctl is-failed --quiet $$A; then systemctl reset-failed $$A; systemctl start --no-block $$A; echo "agent-recover: $$A started again"; \
+        else echo "agent-recover: $$A is no longer failed - no retry"; fi; exit 0; }; \
+    K=$$(grep -v "^untrusted comment:" "$$D/signing.pub" | grep -m1 . | tr -d "[:space:]"); \
+    if [ ! -s "$$P" ] || [ ! -s "$$P.minisig" ] || [ -z "$$K" ]; then \
+        echo "agent-recover: no signed previous binary - nothing to restore"; retry; fi; \
+    if ! minisign -V -q -P "$$K" -m "$$P" -x "$$P.minisig"; then \
+        echo "agent-recover: previous binary fails its signature check - not restored"; retry; fi; \
+    F=$$(sha256sum "$$B" | cut -c1-8); \
+    V=$$("$$P" version 2>/dev/null || grep -a -o -E "config[.]AgentVersion=v[0-9][0-9A-Za-z.-]*" "$$P" | head -1 | cut -d= -f2); \
+    mv -f "$$B" "$$B.failed"; mv -f "$$P" "$$B"; mv -f "$$P.minisig" "$$B.minisig"; \
+    { echo "restored=$$V"; echo "failed=$$F"; } > "$$D/agent-recovered"; \
+    echo "agent-recover: restored agent $$V, failed binary $$F kept as thinforge-agent.failed"; \
+    systemctl reset-failed $$A; systemctl start --no-block $$A'
+RECOVERUNIT
+    echo "[setup] thinforge-agent.service: hardened unit (agent ${AGENT_VERSION_ISO}) + thinforge-agent-recover.service"
+  else
+    cat > /etc/systemd/system/thinforge-agent.service <<'AGENTUNIT'
 [Unit]
 Description=ThinForge Agent (Heartbeat + Updates)
 After=network-online.target data.mount
@@ -353,7 +473,10 @@ RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-AGENTSERVICE
+AGENTUNIT
+    rm -f /etc/systemd/system/thinforge-agent-recover.service
+    echo "[setup] thinforge-agent.service: classic unit (agent ${AGENT_VERSION_ISO:-unknown}, hardened unit from ${UNIT_HARDENED_FROM})"
+  fi
 
   systemctl daemon-reload
   systemctl enable thinforge-agent.service
@@ -372,27 +495,29 @@ fi
 #
 # Ab Agent v2.13.0 ruft das ExecStop= direkt das Agent-Binary auf —
 # der frueher dazwischengeschaltete Shim agent-apply-update.sh ist weg.
-# Die Unit selbst ist unabhaengig von einer Skript-Datei und wird
-# immer installiert (kein Gate mehr).
+#
+# Die Unit kommt als Datei von der ISO (advanced/agent-apply-update.service)
+# — EINE Quelle. Bis 2026-10-01 schrieb dieses Skript einen eigenen Heredoc,
+# und die Datei im Repo war eine zweite, aeltere Fassung ohne data.mount.
+# agent-migrate.sh traegt eine Kopie fuer Bestandsgeraete (es wird einzeln
+# ausgeliefert); dass sie der Datei gleicht, prueft
+# cloningvm_service::tools_iso_unit_tests.
+#
+# Warum data.mount: ExecStop startet das Binary von /data. `After=` ordnet
+# das Stoppen dieser Unit beim Herunterfahren VOR das Aushaengen von /data;
+# ueber local-fs.target allein gilt das nur, solange /data ohne `nofail`
+# eingehaengt ist. `Requires=` laesst die Unit gar nicht erst starten, wenn
+# /data nicht eingehaengt wurde.
 
 echo "[setup] Installing shutdown-update service..."
 
-cat > /etc/systemd/system/agent-apply-update.service <<'APPLYSERVICE'
-[Unit]
-Description=ThinForge Apply Delta Update on Shutdown
-After=local-fs.target data.mount
-Requires=data.mount
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/bin/true
-ExecStop=/data/thinforge/thinforge-agent apply-update
-TimeoutStopSec=600
-
-[Install]
-WantedBy=multi-user.target
-APPLYSERVICE
+APPLY_UNIT_CONTENT=$(get_file "agent-apply-update.service")
+if [ -z "${APPLY_UNIT_CONTENT}" ]; then
+  echo "[setup] ERROR: agent-apply-update.service is missing from the Tools-ISO."
+  echo "[setup] Without it the client never applies updates at shutdown. Rebuild the Tools-ISO."
+  exit 1
+fi
+printf '%s\n' "${APPLY_UNIT_CONTENT}" > /etc/systemd/system/agent-apply-update.service
 
 systemctl daemon-reload
 systemctl enable agent-apply-update.service
@@ -408,15 +533,11 @@ if [ -n "${MANAGE_SNAPS_CONTENT}" ]; then
   echo "[setup] manual-manage-snapshots.sh installed"
 fi
 
-# ── 6e. agent-notify-reboot.sh installieren ────────────────────────────────
-
-NOTIFY_REBOOT_CONTENT=$(get_file "agent-notify-reboot.sh")
-
-if [ -n "${NOTIFY_REBOOT_CONTENT}" ]; then
-  echo "${NOTIFY_REBOOT_CONTENT}" > /opt/thinforge/agent-notify-reboot.sh
-  chmod +x /opt/thinforge/agent-notify-reboot.sh
-  echo "[setup] agent-notify-reboot.sh installed"
-fi
+# ── 6e. (entfaellt) Neustart-Dialog liegt im Go-Agent ─────────────────────
+# Frueher holte dieser Schritt agent-notify-reboot.sh von der ISO. Seit Agent
+# v2.13.0 zeigt der Agent den Dialog selbst (`thinforge-agent notify-reboot`,
+# internal/notify); die Datei liegt nicht mehr auf der ISO, der Schritt tat
+# also nichts mehr. agent-migrate.sh entfernt alte Kopien auf Bestandsgeraeten.
 
 # ── 7. Remote Desktop Abhaengigkeiten installieren ─────────────────────
 
@@ -428,25 +549,54 @@ else
   echo "[setup] WARNING: provision-remote-desktop.sh not available"
 fi
 
-# ── 8. WireGuard-Tools installieren (fuer VPN) ───────────────────────
+# ── 7b. tpm2-tools (TPM-Status im Heartbeat) ───────────────────────────
+# Best effort: ohne Paketquellen bleibt es bei einer Warnung — betroffen ist
+# nur die TPM-Statusmeldung des Agenten, nicht Heartbeat oder Updates.
 
-echo "[setup] Installing WireGuard tools..."
-
-if ! command -v wg &>/dev/null; then
-  if command -v pacman &>/dev/null; then
-    pacman -Sy --noconfirm wireguard-tools
-  elif command -v apt-get &>/dev/null; then
-    apt-get install -y -qq wireguard-tools
-  elif command -v dnf &>/dev/null; then
-    dnf install -y -q wireguard-tools
-  fi
-fi
-
-if command -v wg &>/dev/null; then
-  echo "[setup] WireGuard tools installed ($(wg --version 2>/dev/null || echo 'ok'))"
+if ensure_tpm2_tools; then
+  echo "[setup] tpm2-tools available (TPM status in the heartbeat)"
 else
-  echo "[setup] WARNING: WireGuard tools could not be installed"
+  echo "[setup] WARNING: tpm2-tools could not be installed — the agent will report"
+  echo "[setup]          no TPM (tpm_present=false), even on devices that have one."
+  echo "[setup]          Install tpm2-tools by hand and run this script again."
 fi
+
+# ── 7c. Journal dauerhaft auf /data (Haertungspaket 2, V15) ────────────
+# Ein Subvolume-Tausch ersetzt @rootfs samt /var/log/journal. Deshalb liegt
+# das Journal unter /data/log/journal, /var/log/journal ist ein Symlink
+# dorthin, ein Drop-in erzwingt Storage=persistent (Deckel 200 MB). Dieselben
+# drei Schritte wiederholt agent-migrate.sh bei jedem Agent-Start (Drift-
+# Reparatur nach dem Tausch); hier wie dort wird ein vorhandenes echtes
+# Verzeichnis verschoben, nicht geloescht.
+
+echo "[setup] Moving the journal to /data/log/journal..."
+mkdir -p /data/log/journal
+if [ -d /var/log/journal ] && [ ! -L /var/log/journal ]; then
+  cp -a /var/log/journal/. /data/log/journal/
+  rm -rf /var/log/journal.migrated
+  mv /var/log/journal /var/log/journal.migrated
+fi
+if [ ! -L /var/log/journal ] || [ "$(readlink /var/log/journal)" != "/data/log/journal" ]; then
+  rm -rf /var/log/journal
+  ln -s /data/log/journal /var/log/journal
+fi
+chmod 0755 /data/log/journal
+mkdir -p /etc/systemd/journald.conf.d
+cat > /etc/systemd/journald.conf.d/thinforge.conf <<'JOURNALD'
+[Journal]
+Storage=persistent
+SystemMaxUse=200M
+JOURNALD
+journalctl --rotate 2>/dev/null || true
+journalctl --flush 2>/dev/null || true
+rm -rf /var/log/journal.migrated
+echo "[setup] Journal persistent under /data/log/journal (/var/log/journal is a symlink)"
+
+# ── 8. (entfaellt) WireGuard-Tools ───────────────────────────────────
+# Bis 2026-10-01 installierte dieser Schritt `wireguard-tools`. Den
+# VPN-Transport bringt der NetBird-Client selbst mit (statisch gelinkt, ohne
+# Paketabhaengigkeit auf wireguard-tools); weder der Agent noch ein Skript
+# ruft `wg` auf. Den Tunnel-Zustand zeigt `netbird status -d`.
 
 # ── Fertig ───────────────────────────────────────────────────────────
 
@@ -456,11 +606,10 @@ echo "[setup] Clone preparation complete!"
 echo "[setup]   TLS cert:     installed (HTTPS)"
 echo "[setup]   SSH key:      installed"
 echo "[setup]   Hostname:     automatic via MAC"
-echo "[setup]   Heartbeat:    every 60s with token"
-echo "[setup]   Remote Desktop: x11vnc + zenity (Guacamole)"
-echo "[setup]   WireGuard:    pre-installed (VPN)"
+echo "[setup]   Heartbeat:    with token (interval set by the server, default 10s)"
+echo "[setup]   Remote Desktop: x11vnc (Guacamole VNC)"
 echo "[setup]   Server:       ${SERVER_URL}"
 echo "[setup] =========================================="
 echo "[setup] VM is ready to be cloned."
 echo "[setup] After deployment all clients"
-echo "[setup] are reachable via SSH/Ansible."
+echo "[setup] are reachable via SSH."

@@ -19,7 +19,7 @@ Der **Tasks**-Menüpunkt hat zwei Tabs: **Aufgaben** (Menü „Laufende Tasks") 
 - Agent bauen
 - Datensicherung
 
-Klon-Operationen, Deployments und Rollouts erscheinen hier nicht; ihren Fortschritt zeigen **Cloning** ([05](05-cloning.md)) und [06 — Rollouts](06-rollouts.md).
+Klon-Operationen, Deployments und Update-Zuweisungen erscheinen hier nicht; ihren Fortschritt zeigen die Tabs unter **Cloning** ([05](05-cloning.md), [06 — Rollouts](06-rollouts.md)). Die Neustart-Aufträge, mit denen ein Deployment oder eine Aufnahme online gemeldete Geräte startet, stehen dagegen hier, als SSH-Befehl.
 
 ### Tabelle
 
@@ -32,6 +32,8 @@ Klon-Operationen, Deployments und Rollouts erscheinen hier nicht; ihren Fortschr
 | Dauer | lauf- / gesamt-Zeit |
 | Fehler | Fehlertext bei fehlgeschlagenen Tasks |
 
+Ein SSH-Befehl, eine Inventur oder ein Agent-Update steht erst auf `completed`, wenn das Kommando auf dem Gerät erfolgreich endete. Kam die Verbindung nicht zustande, lief die Frist ab oder meldete das Kommando einen Fehler, steht der Task auf `failed` und nennt den Grund. Bei Neustart und Herunterfahren gilt auch der Abbruch der Verbindung durch das Gerät als Erfolg — der gehört dazu. (Bis zum Update vom 2026-10-01 stand jeder dieser Tasks auf `completed`, sobald der Befehl abgeschickt war.)
+
 ### Filter
 
 - **Status** — Dropdown über alle Status (`pending`, `running`, `completed`, `failed`, `cancelled`)
@@ -43,10 +45,10 @@ Klon-Operationen, Deployments und Rollouts erscheinen hier nicht; ihren Fortschr
 Tasks werden direkt in der Tabelle verwaltet — eine eigene Detailansicht gibt es nicht. Jede Zeile bietet je nach Status passende Icon-Aktionen:
 
 - **Abbrechen** — bei laufenden oder wartenden Tasks
-- **Neustarten** — bei fehlgeschlagenen oder abgebrochenen Tasks, die der Server an Clients zustellt (etwa SSH-Befehl oder Agent-Update); Datensicherung und Agent-Bau lassen sich hier nicht wiederholen
+- **Neustarten** — bei fehlgeschlagenen Tasks, die der Server an Clients zustellt (etwa SSH-Befehl oder Agent-Update); abgebrochene Tasks startest du über ihre ursprüngliche Aktion neu, denn „abgebrochen“ heißt meist ersetzt oder zurückgezogen. Datensicherung und Agent-Bau lassen sich hier nicht wiederholen
 - **Löschen** — bei abgeschlossenen, fehlgeschlagenen und abgebrochenen Tasks
 
-Schlägt ein Task fehl, steht der Fehlertext direkt in der Spalte „Fehler" der jeweiligen Zeile.
+Schlägt ein Task fehl, steht der Fehlertext direkt in der Spalte „Fehler" der jeweiligen Zeile — in der Sprache der Oberfläche. Was das Gerät oder ein Befehl selbst gemeldet hat (etwa die Fehlerzeile von SSH oder das Ende der Ausgabe eines Agent-Baus), steht unübersetzt nach einem Gedankenstrich dahinter. Der Tooltip zeigt den ganzen Text. Tasks von vor dem Update vom 2026-10-20 zeigen ihren Text, wie er damals gespeichert wurde.
 
 ### Geplante Aufgaben
 
@@ -71,7 +73,7 @@ Je Eintrag gibt es **Jetzt ausführen**, **Bearbeiten** (Intervall in Minuten, b
 **Logs** ist nur für Admins im Menü und bündelt zwei Ansichten in zwei Tabs:
 
 - **Audit-Log** — wer hat wann was geändert, dazu An- und Abmeldungen samt Fehlversuchen. Eine paginierte Tabelle, filterbar nach Aktion und Pfad.
-- **Container-Logs** — die Protokolle der ThinForge-Dienste. Hier landen Dinge, die Tasks (siehe oben) nicht abbilden — z. B. interne Fehler im Backend, dnsmasq-Meldungen, Caddy-Zugriffslogs.
+- **Container-Logs** — die Protokolle der ThinForge-Dienste. Hier landen Dinge, die Tasks (siehe oben) nicht abbilden — z. B. interne Fehler im Backend, dnsmasq-Meldungen, Fehlermeldungen des Proxys (Caddy).
 
 ### Audit-Log: wiederholte Anmeldeversuche
 
@@ -85,7 +87,7 @@ Wer Fehlversuche zählen will, zählt deshalb die Versuche, nicht die Zeilen.
 
 ### Audit-Log: Aufbewahrung
 
-Einträge, die älter sind als die eingestellte Aufbewahrungsdauer (Vorgabe 365 Tage, erlaubt 30 bis 3650), löscht der Worker einmal täglich und bei jedem Neustart — einstellbar unter [09 — Einstellungen → Allgemein](09-einstellungen.md). Hat ein Lauf etwas gelöscht, steht das selbst als Eintrag „Alte Audit-Eintraege geloescht" (`audit_retention_purge`) mit Anzahl und Stichtag im Log; eine Änderung der Einstellung erscheint als „Allgemeine Einstellungen geaendert" (`general_settings_update`). Die Aufbewahrung betrifft nur das Audit-Log, nicht die Sicherungen unter Backup & Restore.
+Einträge, die älter sind als die eingestellte Aufbewahrungsdauer (Vorgabe 365 Tage, erlaubt 30 bis 3650), löscht der Worker einmal täglich und bei jedem Neustart — einstellbar unter [09 — Einstellungen → Allgemein](09-einstellungen.md). Hat ein Lauf etwas gelöscht, steht das selbst als Eintrag „Alte Audit-Einträge gelöscht" (`audit_retention_purge`) mit Anzahl und Stichtag im Log; eine Änderung der Einstellung erscheint als „Allgemeine Einstellungen geändert" (`general_settings_update`). Die Aufbewahrung betrifft nur das Audit-Log, nicht die Sicherungen unter Backup & Restore. Eigene Fristen haben seit dem Update vom 2026-10-09 die SSH-Befehlsprotokolle, gelöste Vorfälle und beendete DHCP-Leases (ebenfalls unter [09 — Einstellungen → Allgemein](09-einstellungen.md)); deren Löschläufe stehen als „Alte SSH-Befehlsprotokolle gelöscht" (`ssh_log_retention_purge`), „Alte gelöste Vorfälle gelöscht" (`incident_retention_purge`) und „Alte DHCP-Leases gelöscht" (`dhcp_lease_retention_purge`) mit Anzahl und Stichtag im Log.
 
 ### Container-Logs: Quellen
 
@@ -95,14 +97,18 @@ Dropdown oben — alle Dienste der aktiven Compose-Profile, unter anderem:
 - **Worker** — Hintergrundjob-Runner
 - **dnsmasq (DHCP/PXE)** — DHCP/PXE-Events
 - **NFS Server** — Export-Events (für Rollouts relevant)
-- **Caddy (Proxy)** — Web-Proxy-Zugriffe
+- **Caddy (Proxy)** — Laufzeit- und Fehlermeldungen des Web-Proxys; ein Zugriffsprotokoll führt er nicht ([14 — Datenschutz](14-datenschutz.md#protokolle-der-container))
 - **ThinVPN** — der VPN-Dienst des Servers (NetBird-Client): Anmeldung an der VPN-Instanz, Tunnel- und Routen-Events
 - **Cloner (Clonezilla) / Cloning-VM (QEMU)** — nur wenn ihr Compose-Profil aktiv ist
 - je nach Profil außerdem PostgreSQL, Redis, Frontend, Guacd, Chrony, Multicast-Sender und BitTorrent-Seeder
 
 ### Container-Logs: Anzeige
 
-Angezeigt werden die letzten Zeilen des gewählten Dienstes. Über einen zweiten Selektor wählst du, wie viele Zeilen geladen werden (100, 200, 500 oder 1000 — Standard 200). Ein Knopf aktualisiert die Ausgabe manuell.
+Angezeigt werden die letzten Zeilen des gewählten Dienstes. Über einen zweiten Selektor wählst du, wie viele Zeilen geladen werden (100, 200, 500 oder 1000 — Standard 200). Ein Knopf aktualisiert die Ausgabe manuell. Docker bewahrt je Dienst höchstens drei Dateien zu 50 MB auf und verwirft danach die ältesten Zeilen ([14 — Datenschutz](14-datenschutz.md#protokolle-der-container)).
+
+Hat der gewählte Dienst gerade keinen Container — etwa der BitTorrent-Seeder oder ein Multicast-Sender, solange sie nicht laufen (ThinForge startet sie nur für ein Deployment und entfernt sie danach wieder) —, erscheint seit dem Update vom 2026-10-08 eine Meldung statt einer leeren Ausgabe; ebenso, wenn Docker die Protokolle nicht liefert (die Meldung nennt dann den Grund). Bricht die Übertragung mittendrin ab, endet die Ausgabe mit dem Hinweis `[... log stream from Docker broke off ...]` — es fehlen dann die neuesten Zeilen, ein erneutes Laden holt sie.
+
+Die Container-Logs enthalten alles, was die Dienste protokollieren — bei eingeschaltetem DNS-Protokoll ([07 — Netzwerk](07-netzwerk.md)) etwa jede DNS-Anfrage jedes Clients. Über die Schnittstelle gibt der Server sie deshalb seit dem Update vom 2026-10-08 nur noch an Admins und Operatoren heraus; vorher konnte jede angemeldete Rolle sie dort abrufen. Im Menü stehen sie wie bisher nur Admins zur Verfügung.
 
 ### Wann reicht das nicht?
 

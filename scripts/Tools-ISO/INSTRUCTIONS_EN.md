@@ -15,7 +15,8 @@
 2. Navigate to THINFORGE_TOOLS in file manager, open terminal
 3. Prepare:    sudo bash install-debian.sh prepare /dev/vda
 4. Start Debian installer (Calamares), select Manual partitioning,
-   assign partition 2 to / with mount option subvol=@root
+   assign partition 2 to / (btrfs) — no mount option: thanks to prepare
+   (mount.conf) Calamares creates the subvolume @root itself
 5. Reboot into the new system
 6. Navigate to THINFORGE_TOOLS in file manager, open terminal
 7. Finalize:   sudo bash install-debian.sh finish
@@ -39,7 +40,7 @@ Configures the installed system:
 | GRUB | 2s timeout, snapshot menu visible |
 | grub-btrfs | Snapshots as boot entries |
 | Data partition | Adds partition 3 from step 0 (label "Daten") to fstab and mounts it as `/data` (subvolume `@data`); if it is missing, `finish` aborts before installing the agent |
-| Packages | nfs-common, zstd, curl, jq, python3, x11-utils, minisign, chrony, zenity, yad |
+| Packages | nfs-common, zstd, curl, jq, tpm2-tools, python3, x11-utils, minisign, chrony, zenity, yad |
 | NetBird agent | VPN client via the official installer (`pkgs.netbird.io/install.sh`); service reconfigured to force relay and disable IPv6, then disabled and stopped (it is only enabled once ThinForge activates the device for the VPN); `/etc/netbird` and `/var/lib/netbird` point to `/data/netbird` so the enrollment survives delta updates |
 | SSH | Key-only auth, root via key |
 | Agent | ThinForge agent + delta update service. The agent binary is first checked with `minisign` against its signature and the server's signing key; if it does not match, `finish` aborts (see below) |
@@ -61,8 +62,9 @@ desktop environment and for setups where a netinst ISO is already on hand.
 1. Boot the VM with the netinst ISO, regular d-i (no rescue needed)
 2. In d-i: "Manually edit partitions":
      Partition 1 -> /boot/efi   (keep FAT32, do NOT reformat)
-     Partition 2 -> /            (keep btrfs, do NOT reformat,
-                                  set mount option subvol=@root)
+     Partition 2 -> /            (btrfs; the partition is empty, formatting
+                                  does no harm. Do not set a mount option:
+                                  d-i creates the subvolume @rootfs itself)
      Partition 3 -> do NOT use (reserved for /data)
 3. Tasksel: only "standard system utilities" (minimal)
 4. Run installation, boot into the new system
@@ -70,6 +72,13 @@ desktop environment and for setups where a netinst ISO is already on hand.
      sudo mkdir -p /mnt/tools && sudo mount /dev/sr1 /mnt/tools
      sudo bash /mnt/tools/install-debian-minimal.sh finish
 ```
+
+**Root subvolume:** on btrfs the Debian installer always puts the root file
+system into the subvolume `@rootfs` and writes it to fstab that way
+(`subvol=@rootfs`). A custom mount option such as `subvol=@root` cannot even be
+entered in d-i — its mount options are a fixed checklist. `@rootfs` is correct:
+server and agent detect the root subvolume themselves (the agent knows
+`@rootfs`, `@root` and `@`), and `finish` reports the one it found.
 
 **Tools-ISO path after booting the installed system:** the ThinForge
 cloning VM always attaches the Tools-ISO as the second CD-ROM — it is
@@ -86,8 +95,10 @@ you select the local users who get sudo rights (the first of them gets LightDM
 autologin without screen lock), and unneeded preinstalled programs are removed
 (`DistroTweaks/cleanup-debian.sh`). At the end the script offers to install the
 VDI clients (`DebianVDIClients/install-vdi-clients-debian.sh`). When started via
-`su` instead of `sudo`, it sets up sudo for the calling account and restarts
-itself through it.
+`su` instead of `sudo`, it gives the calling account temporary sudo rights and
+restarts itself through them. At the end it takes them back: the account stays
+in the `sudo` group only if it was checked in the selection or was already a
+member before.
 
 `install-debian-minimal.sh` has no `prepare` step: the layout is created in
 step 0 via the UI and the netinst-d-i uses it directly — no Calamares
@@ -104,7 +115,8 @@ intermediate step needed like in the Live-ISO variant.
 2. Navigate to THINFORGE_TOOLS in file manager, open terminal
 3. Prepare:    sudo bash install-manjaro.sh prepare
 4. Start Calamares, select Manual partitioning, assign partition 2
-   to / with mount option subvol=@root
+   to / (btrfs) — no mount option: thanks to prepare (mount.conf)
+   Calamares creates the subvolume @root itself
 5. Reboot into the new system
 6. Navigate to THINFORGE_TOOLS in file manager, open terminal
 7. Finalize:   sudo bash install-manjaro.sh finish
@@ -127,7 +139,7 @@ truth and Calamares will complain itself if the partitions don't match.
 | GRUB | 2s timeout, snapshot menu visible |
 | grub-btrfs | Snapshots as boot entries |
 | Data partition | `advanced/create-data-partition.sh`: mounts partition 3 from step 0 as `/data` (subvolume `@data`) and adds it to fstab, or creates it from the free space at the end of the disk if it is missing; without `/data`, `finish` aborts |
-| Packages | nfs-utils, zstd, curl, jq, python, xorg-xdpyinfo, minisign, zenity, yad |
+| Packages | nfs-utils, zstd, curl, jq, tpm2-tools, python, xorg-xdpyinfo, minisign, zenity, yad |
 | NetBird agent | as on Debian: official installer, force relay and IPv6 off, service disabled and stopped, state under `/data/netbird` |
 | SSH | Key-only auth, root via key |
 | Agent | ThinForge agent + delta update service. The agent binary is first checked with `minisign` against its signature and the server's signing key; if it does not match, `finish` aborts (see below) |
@@ -191,6 +203,11 @@ THINFORGE_TOOLS/
 ├── ANLEITUNG_DE.md
 ├── INSTRUCTIONS_EN.md
 ├── tf-wall.png
+│   (the server adds the following four when building the ISO)
+├── LICENSE                    license text (GPL-3.0)
+├── NOTICE                     copyright and license notice
+├── THIRD_PARTY_LICENSES.md    third-party components
+├── WRITTEN_OFFER.md           written offer of the source code
 ├── DistroTweaks/
 │   ├── branding-common.sh
 │   ├── cleanup-debian.sh

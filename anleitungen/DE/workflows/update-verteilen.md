@@ -42,6 +42,8 @@ Sauberer Shutdown aus der VM. Die Karte **VM erstellen** zeigt **Gestoppt**.
 
 Das Delta dauert meist 1–5 Minuten (Schritt 1/2), danach entsteht der vollständige Klon (Schritt 2/2). Das Delta wird gegen die Vorversion gebildet, auf dem Server abgelegt und signiert, sofern ein Signing-Key existiert. Es erscheint unter **Cloning → Updates** in der **Update-Kette**.
 
+**Delta auf einen anderen Server mitnehmen:** In der Update-Kette lädt der Download-Knopf eines Deltas es als 7z-Archiv herunter, auf Wunsch mit Passwort verschlüsselt (mindestens 4 Zeichen, nur ASCII-Zeichen). Auf dem anderen Server liest der Import-Knopf im Kopf der Update-Kette das Archiv ein: Nach der Dateiauswahl fragt ein Dialog nach dem Passwort — nur bei verschlüsseltem Export, sonst bleibt das Feld leer (seit dem Update vom 2026-10-08; vorher fragte der Import nicht danach, und ein verschlüsselt exportiertes Delta ließ sich nicht wieder einlesen). Scheitert das Einlesen, etwa an einem falschen Passwort, bleibt der Dialog mit der gewählten Datei offen. Der Server signiert das importierte Delta mit seinem eigenen Signing-Key neu (ohne Key schlägt der Import fehl); an die Geräte geht es wie jedes andere Delta erst mit einer freigegebenen Zuweisung.
+
 ## Schritt 5 — Pilot-Zuweisung
 
 Zuerst auf wenige Test-Clients:
@@ -78,7 +80,7 @@ Wenn Pilot sauber läuft:
 5. Optional **„Benutzer benachrichtigen"** wie im Pilot
 6. **„Hinzufügen"**, dann **„Freigeben"**
 
-Ein Client kann nur in einer offenen Zuweisung stehen; wer noch in einer anderen steckt, wird ausgelassen. Wie viele Clients gleichzeitig laden und mit welcher Bandbreite, legen die **Bandbreiten-Einstellungen** (Zahnrad in der Update-Kette) fest.
+Ein Client kann nur in einer offenen Zuweisung stehen; wer noch in einer anderen steckt, wird ausgelassen. Wie viele Clients gleichzeitig laden und in welchen Grenzen (Obergrenze und Mindestbandbreite je Client), legen die **Bandbreiten-Einstellungen** (Zahnrad in der Update-Kette) fest; innerhalb dieser Grenzen passt der Agent die Bandbreite während des Downloads selbst an die Leitung an.
 
 ## Schritt 8 — Fortschritt überwachen
 

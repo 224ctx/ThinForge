@@ -54,7 +54,7 @@ Tabelle im Deployments-Tab:
 ## Fehlerbehandlung
 
 - Ein Client meldet `failed` → Zeile aufklappen, **Neu starten**; Backend versucht den einzelnen Client erneut.
-- Gesamt-Deployment hängt → **Abbrechen** setzt Status auf „Abgebrochen"; ggf. mit **Fehlgeschlagene neu starten** (für fehlgeschlagene und abgebrochene Clients) nachfassen.
+- Gesamt-Deployment hängt → **Abbrechen** setzt Status auf „Abgebrochen"; ggf. mit **Fehlgeschlagene/abgebrochene neu starten** nachfassen.
 - Seeder startet nicht → **Einstellungen → Dienste** prüfen (`thinforge-bt-seeder-service`-Container). Logs liefern Hinweis, ob opentracker oder EZIO blockiert wurde.
 - Multicast bleibt in der Bereitschaftsphase hängen → Netzwerk-Issue (IGMP-Snooping, Switch-Konfig).
 
@@ -67,5 +67,5 @@ Tabelle im Deployments-Tab:
 ## Nächste Schritte
 
 - [05 — Cloning](../05-cloning.md) für die Grundlagen der Image-Pipeline.
-- [06 — Rollouts](../06-rollouts.md) für staged Rollouts mit Fortschrittskontrolle.
+- [06 — Rollouts](../06-rollouts.md) für Deployments, Verteilmethoden und Fortschrittskontrolle.
 - [workflows/update-verteilen.md](update-verteilen.md) für den Fall, dass kein volles Image, sondern nur ein Delta ausgerollt werden soll.

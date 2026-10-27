@@ -2,7 +2,7 @@
 
 **Valid for three (3) years from the date of distribution of the binary.**
 
-This written offer satisfies Section 3(b) of the GNU General Public License, Version 2, and Section 6(b) of the GNU General Public License, Version 3. A voluntary source statement regarding Section 13 of the GNU Affero General Public License, Version 3 — covering the NetBird stack behind the hosted ThinVPN service — is at the end of this document.
+This written offer satisfies Section 3(b) of the GNU General Public License, Version 2, and Section 6(b) of the GNU General Public License, Version 3. It extends equally to the LGPL-licensed packages in ThinForge's container images. A voluntary source statement regarding Section 13 of the GNU Affero General Public License, Version 3 — covering the NetBird stack behind the hosted ThinVPN service — is at the end of this document.
 
 ## Offer
 
@@ -39,12 +39,31 @@ For each requested component, the delivered archive contains the exact source co
 
 ## Scope
 
-This offer covers every GPL v2-licensed binary that ThinForge itself distributes as part of a release artifact (container images, installation media, or other binary packages signed / published by the ThinForge vendor). Concretely, that currently means:
+This offer covers every GPL- or LGPL-licensed binary that ThinForge itself distributes as part of a release artifact (container images, installation media, or other binary packages signed / published by the ThinForge vendor). That comprises two groups.
+
+**1. Components ThinForge builds or bundles itself** — their corresponding source is also shipped in `sources/` (see "Alternative: immediate access" below):
 
 - **Partclone** — shipped in the `docker/cloner` and `docker/bt-seeder` images
 - **EZIO** — shipped in the `docker/bt-seeder` image
 
-It also covers any GPL-covered package installed via Alpine `apk add` into a ThinForge-distributed image, should its upstream source become unavailable through https://pkgs.alpinelinux.org/packages or https://gitlab.alpinelinux.org/alpine/aports.
+**2. Alpine Linux packages inside the distributed container images.** All ten images ThinForge publishes are built on Alpine Linux: nine — `backend`, `worker`, `cloner`, `cloning-vm`, `bt-seeder`, `multicast-sender`, `dnsmasq`, `nfs-server` and `chrony` — on Alpine 3.24, and `frontend` (since 2026-10-26) on the official `caddy:2-alpine` image, at present Alpine 3.23. The packages installed there via `apk add`, and those the Alpine base layer already brings, are distributed by ThinForge as binaries inside the image. They are unmodified Alpine packages; this offer covers every one of them whose license is a GPL or an LGPL, **without condition** — the public Alpine channels named below are a convenience, not a prerequisite. (`frontend` names no package in its Dockerfile; its Alpine packages, `busybox` and `apk-tools` among them, come with the `caddy:2-alpine` base image. Until 2026-10-26 it was built on a distroless image without Alpine packages.)
+
+GPL- and LGPL-licensed packages installed by name in ThinForge's Dockerfiles (`docker/<image>/Dockerfile`; `backend` and `worker` share `docker/backend/Dockerfile.rust`):
+
+| Image | Packages named in the Dockerfile |
+|-------|----------------------------------|
+| `cloner` | `partclone`, `util-linux`, `btrfs-progs`, `gptfdisk` / `sgdisk`, `parted`, `dosfstools`, `ntfs-3g`, `qemu-img`, `kmod`, `bash`, `coreutils` |
+| `bt-seeder` | `partclone`, `procps-ng`, `bash` |
+| `multicast-sender` | `udpcast`, `bash` |
+| `dnsmasq` | `dnsmasq`, `syslinux`, `grub`, `grub-efi`, `wget` |
+| `cloning-vm` | `qemu-system-x86_64`, `qemu-img`, `qemu-hw-display-virtio-vga`, `qemu-hw-display-virtio-gpu-pci`, `cdrkit`, `websockify` (LGPL), `bash`, `coreutils` |
+| `nfs-server` | `nfs-utils` |
+| `chrony` | `chrony` |
+| `backend`, `worker` | `iproute2`, `iputils`, `cdrkit`, `p7zip` (LGPL; installed as `7zip`) |
+
+Every Alpine-based image additionally carries the GPL packages of the base layer (`busybox`, `apk-tools`, `alpine-baselayout`, …) and GPL or LGPL libraries pulled in as dependencies (for example `readline`, `libgcc` / `libstdc++`, `libblkid` / `libmount`, `xz-libs`). The authoritative, version-exact list for a given image is the output of `apk list --installed` inside it — each line names the package, its version and its license; this offer covers every entry whose license names a GPL or an LGPL.
+
+For such a package, the corresponding source is the Alpine `aports` build recipe for exactly the installed package version — the `APKBUILD`, every patch it applies, and the upstream release archive it references — as published at https://pkgs.alpinelinux.org/packages and https://gitlab.alpinelinux.org/alpine/aports.
 
 It does **not** cover Clonezilla Live (customer downloads from SourceForge directly, ThinForge is not the distributor) or DRBL (not shipped in any release artifact).
 

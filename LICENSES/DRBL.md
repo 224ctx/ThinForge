@@ -3,12 +3,12 @@
 - **License:** GNU General Public License, Version 2 — see [`GPL-2.0.txt`](GPL-2.0.txt)
 - **Copyright:** Steven Shiau and DRBL / NCHC Free Software Labs contributors
 - **Upstream:** https://drbl.org/ · https://github.com/stevenshiau/drbl
-- **Version distributed with ThinForge:** 5.3.17 (reference snapshot only)
-- **Source included in this repository:** `quellinfos/drbl/` (version 5.3.17, unmodified upstream snapshot)
+- **Version distributed with ThinForge:** none (5.3.17 was the reference snapshot formerly kept in the repository)
+- **Source:** not part of this repository — available from upstream (see “Reference” below)
 
 ## How ThinForge uses DRBL
 
-DRBL is **not installed into any ThinForge container image** and **not bundled in any ThinForge release artifact**. It is present in the source repository only as a developer-reference snapshot of the upstream project, used occasionally to look up how DRBL / Clonezilla handle PXE, multicast, and related mechanisms.
+DRBL is **not installed into any ThinForge container image**, **not bundled in any ThinForge release artifact** and not part of the source repository. Developers occasionally consult the upstream project to look up how DRBL / Clonezilla handle PXE, multicast, and related mechanisms.
 
 No DRBL binary is shipped as part of ThinForge.
 
@@ -19,6 +19,6 @@ Since ThinForge does not distribute DRBL binaries, GPL v2 §3 source-with-binary
 ## Reference
 
 - Upstream: https://drbl.org/ and https://github.com/stevenshiau/drbl
-- Full GPL v2 text shipped in [`GPL-2.0.txt`](GPL-2.0.txt) and in `quellinfos/drbl/LICENSE`.
+- Full GPL v2 text shipped in [`GPL-2.0.txt`](GPL-2.0.txt).
 
-The reference snapshot under `quellinfos/drbl/` may be pruned from future releases of the source repository without affecting compliance, as ThinForge is not a distributor of DRBL.
+A reference snapshot formerly kept under `quellinfos/drbl/` was removed from the repository on 2026-04-25; this does not affect compliance, as ThinForge is not a distributor of DRBL.

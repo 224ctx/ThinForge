@@ -8,14 +8,17 @@ auf die Tools-ISO gebaut und beim Client-Setup von hier installiert.
 ## Ablauf
 
 1. **Pakete bereitstellen** — in der Oberfläche unter *Cloning → VDI-Clients* je
-   Client hochladen (der Server spielt sie beim nächsten Bau der Tools-ISO in
-   `DebianVDIClients/` ein), oder in diesen Ordner legen — entweder manuell von
+   Client hochladen (der Server spielt sie beim nächsten Bau der Tools-ISO, also
+   beim nächsten Start der Cloning-VM, in `DebianVDIClients/` ein), oder in
+   diesen Ordner legen — entweder manuell von
    der Hersteller-Seite herunterladen, oder auf dem Build-Host:
    ```
    cp DebianVDIClients/urls.conf.example DebianVDIClients/urls.conf   # URLs eintragen
    bash DebianVDIClients/install-vdi-clients-debian.sh download
    ```
-2. **Tools-ISO bauen** — die Pakete liegen dann unter `DebianVDIClients/` auf der ISO.
+2. **Tools-ISO bauen** — das geschieht seit dem Update vom 2026-10-01 bei jedem
+   Start der Cloning-VM von selbst; die Pakete liegen dann unter
+   `DebianVDIClients/` auf der ISO.
 3. **Auf dem Client installieren** (als root):
    ```
    sudo mkdir -p /mnt/tools && sudo mount /dev/sr1 /mnt/tools   # Tools-ISO = zweites CD-ROM
@@ -45,4 +48,4 @@ auf die Tools-ISO gebaut und beim Client-Setup von hier installiert.
 - **Omnissa Horizon** liefert i.d.R. ein `.bundle` (self-extracting) → `sh datei.bundle --console --required --eulas-agreed`. Flags sind per Env `HORIZON_BUNDLE_FLAGS` überschreibbar. Liegt stattdessen ein `.deb` vor, wird dieses genutzt.
 - Der Installer ist **idempotent** und überspringt fehlende Clients ohne Fehler — es muss nicht jeder der drei vorhanden sein.
 - Die eigentlichen Hersteller-Pakete sind **nicht im Git** (lizenziert + groß), siehe `.gitignore`. In den Git eingecheckt sind nur Installer, README und `urls.conf.example`.
-- Es gibt **keine apt-Auto-Updates** — bei neuen Client-Versionen das Paket austauschen und die ISO neu bauen.
+- Es gibt **keine apt-Auto-Updates** — bei neuen Client-Versionen das Paket austauschen und die Cloning-VM neu starten (sie baut die ISO dabei neu).

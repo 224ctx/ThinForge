@@ -107,6 +107,66 @@ ensure_enabled_profiles() {
   echo "  THINFORGE_ENABLED_PROFILES=${aktuell} ist ein eigener Wert und bleibt stehen (Standard waere ${standard})"
 }
 
+# ── Abrufe nach aussen: fruehere Vorgaben einmalig ausschalten ─────
+# Bis 2026-10 trug .env.example zwei Abrufe ins Internet als Vorgabe ein: den
+# Abgleich der Akzeptanzliste (THINFORGE_ACCEPTANCE_LIST_MODE=remote mit der
+# offiziellen Adresse auf git.thinforge.org) und den KEV-Katalog
+# (THINFORGE_KEV_URL mit dem CISA-Feed). Seitdem sind beide aus, auch fuer
+# bestehende Installationen: beim Update werden sie ausgeschaltet.
+#
+# Umgestellt wird nur, was genau die frueher ausgelieferten Werte traegt; eine
+# andere Adresse (ein eigener Spiegel) hat der Betrieb gesetzt und bleibt.
+# Danach markiert eine Kommentarzeile die .env als geprueft, und die Funktion
+# tut nichts mehr: wer einen Abruf spaeter bewusst wieder einschaltet, auch mit
+# der offiziellen Adresse, behaelt seine Wahl. Gemeldet wird nur eine echte
+# Umstellung, und nur einmal.
+#
+# Laeuft in load_storage_dir und damit fuer deploy.sh, rebuild.sh,
+# install-deps.sh und clean-reset.sh — auch fuer das deploy.sh des
+# Release-Repos, das diese Datei mitbringt. Wertaenderungen gehen wie in
+# ensure_enabled_profiles ueber `sed -i`; das folgende `up -d` erzeugt das
+# Backend wegen der geaenderten Umgebung neu und bindet `/.env` frisch ein.
+EXTERNE_ABRUFE_MARKE='# thinforge-migration: externe-abrufe-aus'
+AKZEPTANZLISTE_FRUEHERE_URLS=(
+  # .env.example seit 2026-07-16 (und vom 2026-07-13 bis 2026-07-14)
+  "https://git.thinforge.org/thinforge/ThinForge-Release/raw/branch/master/docs/security/vulnerability-acceptance.md"
+  # .env.example 2026-07-14 bis 2026-07-16 (Ein-Repo-Zwischenstand)
+  "https://git.thinforge.org/thinforge/ThinForge/raw/branch/master/docs/security/vulnerability-acceptance.md"
+)
+KEV_FRUEHERE_URL="https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+ensure_external_fetches_off() {
+  local env_file="${PROJECT_ROOT}/.env"
+  [ -f "$env_file" ] || return 0
+  grep -qxF "$EXTERNE_ABRUFE_MARKE" "$env_file" && return 0
+
+  local modus url kev bekannt umgestellt=""
+  # `|| true`: ohne die Zeile liefert grep 1, und unter `set -eo pipefail`
+  # (deploy.sh, rebuild.sh) braeche die Zuweisung das Skript ab.
+  modus=$(grep '^THINFORGE_ACCEPTANCE_LIST_MODE=' "$env_file" | tail -n 1 | cut -d= -f2- || true)
+  url=$(grep '^THINFORGE_ACCEPTANCE_LIST_URL=' "$env_file" | tail -n 1 | cut -d= -f2- || true)
+  kev=$(grep '^THINFORGE_KEV_URL=' "$env_file" | tail -n 1 | cut -d= -f2- || true)
+
+  if [ "$modus" = "remote" ]; then
+    for bekannt in "${AKZEPTANZLISTE_FRUEHERE_URLS[@]}"; do
+      if [ "$url" = "$bekannt" ]; then
+        sed -i 's|^THINFORGE_ACCEPTANCE_LIST_MODE=.*|THINFORGE_ACCEPTANCE_LIST_MODE=local|' "$env_file"
+        umgestellt="Akzeptanzlisten-Abgleich (git.thinforge.org)"
+        break
+      fi
+    done
+  fi
+  if [ "$kev" = "$KEV_FRUEHERE_URL" ]; then
+    sed -i 's|^THINFORGE_KEV_URL=.*|THINFORGE_KEV_URL=|' "$env_file"
+    umgestellt="${umgestellt:+${umgestellt} und }KEV-Abruf (cisa.gov)"
+  fi
+
+  printf '\n# Abrufe nach aussen (Akzeptanzlisten-Abgleich, KEV-Katalog): die frueheren\n# Vorgaben hat scripts/lib-env.sh einmalig ausgeschaltet; eigene Werte bleiben stehen.\n%s\n' \
+    "$EXTERNE_ABRUFE_MARKE" >> "$env_file"
+  if [ -n "$umgestellt" ]; then
+    echo "  [migration] ${umgestellt} in .env ausgeschaltet — das waren die frueheren Vorgaben, kein eigener Wert. Wieder einschalten: siehe .env.example"
+  fi
+}
+
 # ── .env sicherstellen ─────────────────────────────────────────────
 # Erzeugt .env aus .env.example wenn sie fehlt. Generiert sichere
 # Zufallswerte fuer Secrets.
@@ -167,6 +227,8 @@ load_storage_dir() {
   # Nach der Erzeugung (oder auf einer bestehenden .env): spaeter dazugekommene
   # Pflicht-Secrets nachziehen, BEVOR irgendein compose-Aufruf die Datei liest.
   ensure_env_secrets
+  # Fruehere Vorgaben fuer Abrufe nach aussen einmalig ausschalten (2026-10).
+  ensure_external_fetches_off
 
   STORAGE_DIR="${STORAGE_DIR:-}"
 
@@ -190,6 +252,98 @@ load_storage_dir() {
     sed -i "s|^STORAGE_DIR=\./.*|STORAGE_DIR=${STORAGE_DIR}|" "${PROJECT_ROOT}/.env"
     echo "  STORAGE_DIR in .env auf absoluten Pfad aktualisiert: ${STORAGE_DIR}"
   fi
+}
+
+# ── PostgreSQL: Wechsel von glibc auf musl absichern ───────────────
+# ThinForge-Dev bezog PostgreSQL bis 2026-10-26 als reg.mini.dev/postgres:18
+# (Minimus, glibc), seitdem als postgres:18-alpine (musl); Minimus hat die
+# Registry am 2026-10-22 abgeschaltet. musl sortiert Text anders, die unter
+# glibc gebauten Textindizes passen danach nicht mehr. thinforge-migrate baut
+# sie beim ersten Start von Backend und Worker neu auf, aber erst ab dem Stand
+# POSTGRES_REINDEX_SEIT (4acb3154, crates/thinforge-migrate/src/collation.rs).
+# Ein aelteres Backend, so das des Kanals :release bis zum naechsten Release
+# (gebaut 2026-09-24), startet ohne Neuaufbau: Suchen ueber einen Textindex
+# finden Zeilen nicht mehr, eindeutige Indizes lassen Doppel zu (Nachstellung
+# in collation.rs: 4 von 29 Textindizes kaputt, 297 von 2580 Benutzernamen
+# gefunden).
+#
+# guard_postgres_libc_switch <compose-befehl…> gibt 1 zurueck und erklaert auf
+# stderr, wenn das PostgreSQL-Abbild der Compose-Datei musl ist, der Wechsel
+# noch aussteht und das Backend der Compose-Datei aelter ist als der
+# Neuaufbau. Ausstehend ist der Wechsel, wenn
+#   - das laufende PostgreSQL fuer die ThinForge-Datenbank eine
+#     Collation-Version gespeichert hat (nur glibc schreibt eine; eine unter
+#     musl angelegte oder neu aufgebaute Datenbank hat keine), oder
+#   - PostgreSQL nicht laeuft und das Datenverzeichnis einem anderen Benutzer
+#     gehoert als dem postgres-Benutzer des Ziel-Abbilds (dessen Einstieg
+#     uebernimmt es beim ersten Start: Alpine 70, Minimus 999).
+# Was sich nicht lesen laesst, sperrt ebenfalls. Ohne Datenverzeichnis (neue
+# Installation) und mit einem glibc-Ziel bleibt die Sperre aus. deploy.sh ruft
+# sie nach dem Pull und vor jedem Eingriff auf; rebuild.sh braucht sie nicht,
+# es baut das Backend aus dem Quelltext. Test:
+# scripts/tests/postgres-libc-switch-gate.sh.
+POSTGRES_REINDEX_SEIT='2026-10-16T07:51:16+02:00'
+guard_postgres_libc_switch() {
+  local compose=("$@")
+  local pgdata="${STORAGE_DIR}/postgres/pgdata"
+  local images pg_img backend_img ziel_uid befund created gebaut
+
+  images=$("${compose[@]}" config --images 2>/dev/null) || images=''
+  pg_img=$(printf '%s\n' "$images" | grep -E '(^|/)postgres[:@]' | head -n 1) || pg_img=''
+  backend_img=$(printf '%s\n' "$images" | grep -E '(^|/)thinforge-backend[:@]' | head -n 1) || backend_img=''
+  [ -n "$pg_img" ] || return 0
+
+  # musl-Ziel? Dann nennt das Abbild die uid seines postgres-Benutzers.
+  ziel_uid=$(docker run --rm --pull=never --network none --entrypoint sh "$pg_img" \
+    -c 'ls /lib/ld-musl-* >/dev/null 2>&1 && id -u postgres' 2>/dev/null) || return 0
+  [ -n "$ziel_uid" ] || return 0
+
+  if "${compose[@]}" exec -T postgres true >/dev/null 2>&1; then
+    if befund=$(printf '%s\n' "select coalesce(datcollversion, '') from pg_database where datname = current_database();" \
+        | "${compose[@]}" exec -T postgres sh -c 'psql -X -A -t -q -U "$POSTGRES_USER" -d "$POSTGRES_DB"' 2>/dev/null); then
+      [ -n "$befund" ] || return 0
+      befund="gespeicherte Collation-Version ${befund}"
+    else
+      befund="Collation-Version der Datenbank unlesbar"
+    fi
+  else
+    sudo test -d "$pgdata" || return 0
+    if befund=$(sudo stat -c %u "$pgdata" 2>/dev/null); then
+      [ "$befund" != "$ziel_uid" ] || return 0
+      befund="PostgreSQL laeuft nicht, das Datenverzeichnis gehoert uid ${befund} statt ${ziel_uid}"
+    else
+      befund="PostgreSQL laeuft nicht, Besitzer des Datenverzeichnisses unlesbar"
+    fi
+  fi
+
+  created=$(docker image inspect -f '{{.Created}}' "$backend_img" 2>/dev/null) || created=''
+  if [ -n "$created" ] \
+     && [ "$(date -d "$created" +%s 2>/dev/null || echo 0)" -ge "$(date -d "$POSTGRES_REINDEX_SEIT" +%s)" ]; then
+    return 0
+  fi
+  gebaut="${created:0:10}"
+  [ -n "$gebaut" ] || gebaut="unbekannt"
+
+  {
+    echo ""
+    echo "FEHLER: Dieser Deploy stellt PostgreSQL auf ${pg_img} um (musl), die"
+    echo "        Datenbank stammt aber aus einem glibc-Abbild: ${befund}."
+    echo "        Ihre Textindizes muessen dabei neu aufgebaut werden, und das kann erst"
+    echo "        ein Backend ab dem ${POSTGRES_REINDEX_SEIT:0:10}. ${backend_img:-Das Backend} ist gebaut am ${gebaut}."
+    echo "        Ohne Neuaufbau sortieren die Textindizes falsch: Suchen finden Zeilen"
+    echo "        nicht mehr, eindeutige Indizes lassen Doppel zu."
+    echo "        Am Stack wurde nichts veraendert."
+    echo ""
+    echo "        Weiter auf einem dieser Wege:"
+    echo "          THINFORGE_TAG=beta ./deploy.sh --persist-tag"
+    echo "              Kanal beta; dessen Backend baut die Indizes beim ersten Start neu auf"
+    echo "          ./rebuild.sh"
+    echo "              nur ThinForge-Dev: baut Backend und Worker aus dem Quelltext"
+    echo "          das Update bis zum naechsten Release zurueckstellen, auch kein"
+    echo "              'docker compose up' von Hand: es loeste denselben Wechsel aus"
+    echo "        Schritt fuer Schritt: https://thinforge.org/doku-migration.html"
+  } >&2
+  return 1
 }
 
 # ── Kernel-Modul laden ─────────────────────────────────────────────

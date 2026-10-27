@@ -1,16 +1,16 @@
 #!/bin/bash
 # thinforge-vpn-reset.sh
 #
-# Remove the WireGuard-era (pre-NetBird) VPN artefacts from a ThinForge
-# client. Removes every artefact that could pin the client to a stale
+# Remove the WireGuard-era (pre-NetBird) VPN artifacts from a ThinForge
+# client. Removes every artifact that could pin the client to a stale
 # WireGuard identity:
 #
 #   - Stops wg-quick@thinvpn so nothing holds /run/thinforge-wg open
 #   - Evicts the TPM-sealed key at handle 0x81020001 (only if it's our
 #     own keyedhash object — refuses to touch foreign TPM content
 #     unless --force is given)
-#   - Removes all TPM-mode artefacts on /data and /etc + /run tmpfs
-#   - Removes plaintext-mode artefacts on /data and the /etc symlink
+#   - Removes all TPM-mode artifacts on /data and /etc + /run tmpfs
+#   - Removes plaintext-mode artifacts on /data and the /etc symlink
 #   - daemon-reload so systemd forgets the dropin
 #
 # NetBird is NOT touched: the enrollment under /data/netbird, the netbird
@@ -25,7 +25,7 @@
 # Idempotent: safe to re-run, no-op on clean clients.
 #
 # Exit codes:
-#   0  WireGuard-era artefacts are gone (whether something was removed or not)
+#   0  WireGuard-era artifacts are gone (whether something was removed or not)
 #   1  refused to touch foreign TPM content; pass --force to override
 #   2  a step failed (tpm2_evictcontrol error, unwritable filesystem, …)
 
@@ -146,9 +146,9 @@ case "$rc" in
 esac
 
 # ---------------------------------------------------------------------------
-# 3) Remove TPM-mode artefacts (source-of-truth on /data + runtime on @root)
+# 3) Remove TPM-mode artifacts (source-of-truth on /data + runtime on @root)
 # ---------------------------------------------------------------------------
-TPM_ARTEFACTS=(
+TPM_ARTIFACTS=(
     /data/wireguard/thinvpn.template.conf
     /data/wireguard/thinforge-wg-unseal.sh
     /data/wireguard/tpm-dropin.conf
@@ -156,7 +156,7 @@ TPM_ARTEFACTS=(
     /etc/systemd/system/wg-quick@thinvpn.service.d/tpm.conf
     /etc/systemd/system/wg-quick@thinvpn.service.d/override.conf
 )
-for f in "${TPM_ARTEFACTS[@]}"; do
+for f in "${TPM_ARTIFACTS[@]}"; do
     if [ -e "$f" ] || [ -L "$f" ]; then
         rm -f "$f" && log "removed $f"
     fi
@@ -172,13 +172,13 @@ if [ -d /run/thinforge-wg ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 4) Remove plaintext-mode artefacts so nothing of the old identity remains
+# 4) Remove plaintext-mode artifacts so nothing of the old identity remains
 # ---------------------------------------------------------------------------
-PLAINTEXT_ARTEFACTS=(
+PLAINTEXT_ARTIFACTS=(
     /data/wireguard/thinvpn.conf
     /etc/wireguard/thinvpn.conf
 )
-for f in "${PLAINTEXT_ARTEFACTS[@]}"; do
+for f in "${PLAINTEXT_ARTIFACTS[@]}"; do
     # Use -L (symlink check) before -e (target check) so a dangling
     # symlink is also caught.
     if [ -L "$f" ] || [ -e "$f" ]; then
@@ -204,7 +204,7 @@ if command -v tpm2_getcap >/dev/null 2>&1 \
         clean=0
     fi
 fi
-for f in "${TPM_ARTEFACTS[@]}" "${PLAINTEXT_ARTEFACTS[@]}"; do
+for f in "${TPM_ARTIFACTS[@]}" "${PLAINTEXT_ARTIFACTS[@]}"; do
     if [ -L "$f" ] || [ -e "$f" ]; then
         log "post-reset: $f still present"
         clean=0
@@ -213,9 +213,9 @@ done
 
 if [ "$clean" -eq 1 ]; then
     if netbird_owns_link; then
-        log "WireGuard-era VPN artefacts removed — the NetBird enrollment on this client is untouched"
+        log "WireGuard-era VPN artifacts removed — the NetBird enrollment on this client is untouched"
     else
-        log "WireGuard-era VPN artefacts removed — no NetBird enrollment on this client"
+        log "WireGuard-era VPN artifacts removed — no NetBird enrollment on this client"
     fi
     exit 0
 fi

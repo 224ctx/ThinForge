@@ -15,6 +15,8 @@ The following components are **built into container images that ThinForge pushes
 
 Canonical license texts: [`LICENSES/GPL-2.0.txt`](LICENSES/GPL-2.0.txt), [`LICENSES/GPL-3.0.txt`](LICENSES/GPL-3.0.txt).
 
+Beyond these two, the GPL- and LGPL-licensed Alpine packages listed under "Additional FOSS Components via Base Images" below are distributed inside the images as well; the written offer in [`WRITTEN_OFFER.md`](WRITTEN_OFFER.md) covers them without condition.
+
 ## GPL v2 Components ThinForge References But Does Not Distribute
 
 The following components are **orchestrated** by ThinForge but their binaries are never built into ThinForge's own release artifacts. They are downloaded from upstream or referenced for documentation only; GPL v2 §3 source-with-binary obligations do not apply to ThinForge for these.
@@ -73,16 +75,16 @@ For GPL v2 components **merely referenced but not distributed** by ThinForge (Cl
 
 ## Additional FOSS Components via Base Images
 
-The ThinForge container images are built on Alpine Linux 3.22 base images. Those base images include additional FOSS packages — kernel utilities, shell, libc (musl), OpenSSL, curl, and others — distributed under GPL v2, GPL v3, LGPL, MIT, BSD, Apache, or similar licenses.
+The ThinForge container images are built on Alpine Linux base images: Alpine 3.24, the frontend image (since 2026-10-26) on the official `caddy:2-alpine`, at present Alpine 3.23. Those base images include additional FOSS packages — kernel utilities, shell, libc (musl), OpenSSL, curl, and others — distributed under GPL v2, GPL v3, LGPL, MIT, BSD, Apache, or similar licenses.
 
 For every such package installed via `apk add` in the Dockerfiles under `docker/`, corresponding source code and license is available via the Alpine package archive:
 
 - https://pkgs.alpinelinux.org/packages — find any `apk info`-listed package
 - https://gitlab.alpinelinux.org/alpine/aports — the build recipe + `source` tarball URL per package
 
-This written notice, together with the authoritative upstream channels above, serves as the source offer for those additional FOSS packages. The written offer in [`WRITTEN_OFFER.md`](WRITTEN_OFFER.md) likewise extends to any GPL-covered package installed into a ThinForge-distributed image, should upstream sources become unavailable.
+ThinForge distributes these packages as binaries inside its images. For every GPL- or LGPL-licensed one among them, the written offer in [`WRITTEN_OFFER.md`](WRITTEN_OFFER.md) applies **without condition** (GPL v2 §3(b), GPL v3 §6(b)); the upstream channels above are a convenience, not a substitute. Until 2026-10-01 the offer covered them only "should upstream sources become unavailable". For the permissively licensed packages, the upstream channels above serve as the source pointer.
 
-The table below lists every non-trivially-licensed package currently installed in any ThinForge-distributed image. **This list is non-exhaustive — the authoritative inventory for any released image is the output of `apk info -v` inside that image.**
+The table below lists every non-trivially-licensed package currently installed in any ThinForge-distributed image. **This list is non-exhaustive — the authoritative inventory for any released image is the output of `apk list --installed` inside that image, which names version and license for every package.**
 
 | Package | License | Role | In image(s) |
 |---------|---------|------|-------------|
@@ -110,7 +112,14 @@ The table below lists every non-trivially-licensed package currently installed i
 | `opentracker` | Beerware | BitTorrent tracker | bt-seeder |
 | `libtorrent-rasterbar` | BSD-3-Clause | BitTorrent library | bt-seeder |
 | `ca-certificates` | MPL-2.0 | root CA bundle | various |
-| `cdrkit` (`genisoimage`) | GPL v2 | ISO creation | cloning-vm |
+| `cdrkit` (`genisoimage`) | GPL v2 | ISO creation | cloning-vm, backend, worker |
+| `chrony` | GPL v2 (or later) | NTP server | chrony |
+| `nfs-utils` | GPL v2 | NFS server | nfs-server |
+| `rpcbind` | BSD-3-Clause | RPC port mapper | nfs-server |
+| `iproute2` | GPL v2 (or later) | network configuration (`ip`) | backend, worker |
+| `iputils` | BSD-3-Clause + GPL v2 (or later) | `ping` | backend, worker |
+| `7zip` (Dockerfile: `p7zip`) | LGPL v2 | 7z archives (clone/delta export) | backend, worker |
+| `busybox`, `apk-tools` | GPL v2 | Alpine base system | every Alpine-based image |
 | `websockify` | LGPL v3 | WebSocket↔TCP bridge | cloning-vm |
 | `wget` | GPL v3 | HTTP(S) client | dnsmasq |
 | `py3-libtorrent-rasterbar` | BSD-3-Clause | Python BitTorrent binding | bt-seeder |
@@ -119,14 +128,20 @@ None of these are linked into the ThinForge binaries; all are invoked as separat
 
 ## License Files Bundled With the Release
 
-Each distribution of ThinForge (source repository, Release repository, container images, installation media) includes:
+The source repository and the Release repository each include:
 
 - `LICENSE` — ThinForge's own license: the GNU GPL v3 (ThinForge components are licensed GPL-3.0-or-later).
 - `NOTICE` — short notice of bundled FOSS.
 - `THIRD_PARTY_LICENSES.md` — this file.
 - `LICENSES/` — directory containing `GPL-2.0.txt`, `GPL-3.0.txt` and per-component metadata.
 - `WRITTEN_OFFER.md` — written offer for source code per GPL v2 §3(b) / GPL v3 §6(b), plus the voluntary AGPLv3 §13 source statement for the operated NetBird stack.
-- `sources/` — corresponding source tarballs for every GPL binary ThinForge distributes (with pinned SHA-256).
+- `sources/` — corresponding source tarballs for Partclone and EZIO (with pinned SHA-256); for the GPL/LGPL Alpine packages in the images, the written offer applies.
+
+The agent binary in the Release repository is ThinForge's own code (GPL-3.0-or-later). Next to it, `agent-go/bin/SOURCE` (written by `agent-go/build-and-sign.sh` with every build) names the exact source commit and the tree hash of `agent-go/` it was built from; in the source repository, every commit for which `git rev-parse <commit>:agent-go` prints that hash carries its source.
+
+Every ThinForge container image carries, under `/usr/share/licenses/`, the GPL texts that apply to the software inside it, the per-component metadata where needed (`Partclone.md`, `EZIO.md`), this file and `WRITTEN_OFFER.md`; the backend and worker image additionally has `LICENSE` and `NOTICE` under `/app/`. The Tools-ISO that every server builds for its own cloning VM contains ThinForge's scripts and agent binary plus the VDI client packages the operator uploads; the server also places `LICENSE`, `NOTICE`, this file and `WRITTEN_OFFER.md` from its backend image in the root of every Tools-ISO it builds, and builds none without them.
+
+A machine-readable inventory of the packages in every image (SBOM in syft JSON, CycloneDX and SPDX) is produced on the running system by the vulnerability scan. It covers the Alpine and Python packages and the Go modules inside Go binaries; the Rust crates compiled into the ThinForge binaries and the npm packages bundled into the web interface are not in it — their authoritative lists are `Cargo.lock` and `frontend/package-lock.json` (with a license field per package) in the source repository.
 
 ## Contact
 

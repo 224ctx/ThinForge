@@ -6,11 +6,15 @@
 #
 #   VORHER (vor dem Calamares-Installer):
 #     sudo bash install-manjaro.sh prepare
-#     → Passt Calamares an: @root statt @, Daten-Partition
+#     → Passt Calamares an: alles in EINEM Subvolume @root (statt @, @home,
+#       @cache, @log). Das Plattenlayout samt Daten-Partition legt vorher
+#       das ThinForge-UI an ('Basis HD erstellen'), nicht dieses Skript
 #     → Danach den Installer ganz normal starten
 #
 #   NACHHER (nach dem Calamares-Installer, im installierten System):
 #     sudo bash install-manjaro.sh finish [--server=https://...]
+#     (--server setzt nur die Zeitquelle der VM; die Server-URL des Agents
+#      kommt immer aus advanced/server_url der Tools-ISO)
 #     → GRUB mit ThinForge Boot-Logik
 #     → ThinForge Agent installieren
 #
@@ -119,8 +123,8 @@ do_prepare() {
     echo ""
     echo -e "  1. Start the Manjaro installer (Calamares)"
     echo -e "  2. During partitioning:"
-    echo -e "     - Select 'Erase disk' (recommended)"
-    echo -e "     - OR 'Manual partitioning':"
+    echo -e "     - Choose ${YELLOW}'Manual partitioning'${NC} — NOT 'Erase disk': that deletes the"
+    echo -e "       data partition from 'Create base HD', and finish then aborts:"
     echo -e "       → Partition 1: 2 GB, FAT32, /boot/efi, flag: boot"
     echo -e "       → Partition 2: remainder, btrfs, /"
     echo -e "       → Partition 3: already present from UI — do NOT reassign (stays data partition)"
@@ -197,8 +201,10 @@ do_finish() {
     fi
 
     # grub-btrfs: Single-Root-Layout-Namen + ROOT_SV_old ignorieren.
-    # @snap_*_home und der neueste @snap_* werden von agent-apply-delta.sh
-    # dynamisch zur Liste hinzugefuegt, damit genau EIN Rollback sichtbar ist.
+    # Beim Anwenden eines Updates schreibt der Agent die Liste neu
+    # (thinforge-agent apply-update beim Herunterfahren): dieselben Namen plus
+    # den @snap_*, aus dem die neue Wurzel entstanden ist — der ist
+    # inhaltsgleich mit dem Standard-Eintrag.
     local grub_btrfs_conf="/etc/default/grub-btrfs/config"
     if [ -f "$grub_btrfs_conf" ]; then
         sed -i 's/^GRUB_BTRFS_IGNORE_SPECIFIC_PATH=.*/GRUB_BTRFS_IGNORE_SPECIFIC_PATH=("@" "@root" "@rootfs" "@data" "@root_old" "@rootfs_old" "@_old")/' "$grub_btrfs_conf"
@@ -207,11 +213,14 @@ do_finish() {
 
     # grub-btrfsd DEAKTIVIEREN — der Daemon ueberwacht /.snapshots und
     # triggert grub-mkconfig bei Snapshot-Aenderungen, was auf Thin Clients
-    # mit wenig RAM das System einfriert. GRUB wird stattdessen beim
-    # Shutdown von agent-apply-delta.sh aktualisiert (VOR dem Subvolume-Swap).
+    # mit wenig RAM das System einfriert. GRUB aktualisiert stattdessen der
+    # Agent beim Anwenden eines Updates (thinforge-agent apply-update beim
+    # Herunterfahren): NACH dem Subvolume-Swap per chroot aus der neuen Wurzel,
+    # samt Pruefung der Starteintraege — ist die neue Wurzel nicht startfaehig,
+    # nimmt er den Swap zurueck.
     systemctl disable grub-btrfsd.service 2>/dev/null || true
     systemctl stop grub-btrfsd.service 2>/dev/null || true
-    log "grub-btrfsd disabled (GRUB will be updated by agent-apply-delta.sh)"
+    log "grub-btrfsd disabled (GRUB is updated by the agent when it applies an update)"
 
 
     # grub-btrfs-overlayfs in initramfs aktivieren — ermoeglicht das Booten
@@ -279,7 +288,10 @@ do_finish() {
     log "Installing additional packages..."
 
     # Pakete die Calamares evtl. nicht installiert hat
-    local EXTRA_PKGS=(nfs-utils zstd curl jq python xorg-xdpyinfo minisign zenity yad)
+    # tpm2-tools: der Agent liest den TPM-Zustand ueber `tpm2_getcap`
+    # (agent-go/internal/tpm/tpm.go::Present); ohne das Paket meldet er
+    # auch auf Geraeten mit TPM "kein TPM" (tpm_present=false).
+    local EXTRA_PKGS=(nfs-utils zstd curl jq tpm2-tools python xorg-xdpyinfo minisign zenity yad)
     local TO_INSTALL=()
 
     for pkg in "${EXTRA_PKGS[@]}"; do
@@ -407,9 +419,10 @@ TSYNC
 
     if [ -f "$INSTALL_SCRIPT" ]; then
         log "Agent script found on ISO: $INSTALL_SCRIPT"
-        if [ -n "$THINFORGE_SERVER" ]; then
-            export THINFORGE_SERVER
-        fi
+        # Kein THINFORGE_SERVER-Export mehr: 1-create-client-management.sh
+        # liest die Server-URL nur aus advanced/server_url der ISO und hat die
+        # Variable nie ausgewertet. --server setzt allein die Zeitquelle
+        # (NTP-Schritt oben).
         bash "$INSTALL_SCRIPT"
     else
         # Curl-Bootstrap-Modus wurde aus Sicherheitsgruenden entfernt
@@ -441,8 +454,17 @@ TSYNC
     # ── System auf den neuesten Stand bringen ────────────────────────
 
     log "Updating system (pacman -Syu)..."
-    pacman -Syu --noconfirm 2>/dev/null || warn "System update failed"
-    log "System updated."
+    # "System updated." stand frueher hinter `|| warn` und lief damit auch
+    # nach einem gescheiterten Upgrade (Repo nicht erreichbar, Konflikt); das
+    # Abschlussbanner meldete dann trotzdem "Updated". Gleiche Struktur wie
+    # install-debian.sh (b4bc5e3d).
+    if pacman -Syu --noconfirm 2>/dev/null; then
+        SYSTEM_UPDATED=1
+        log "System updated."
+    else
+        SYSTEM_UPDATED=0
+        warn "System update failed — the system is NOT fully patched."
+    fi
 
     # ── Paket-Cache aufraeumen ───────────────────────────────────────
 
@@ -487,12 +509,19 @@ TSYNC
     echo -e "  GRUB:       ThinForge boot logic with rollback"
     echo -e "  Agent:      Installed"
     echo -e "  SSH:        Key-only auth enabled"
-    echo -e "  System:     Updated + cache cleaned"
+    # Nicht behaupten, was nicht stimmt: bei fehlgeschlagenem Upgrade stand
+    # hier bisher trotzdem "Updated".
+    if [ "${SYSTEM_UPDATED:-0}" = "1" ]; then
+        echo -e "  System:     Updated + cache cleaned"
+    else
+        echo -e "  System:     ${YELLOW}NOT fully updated${NC} (pacman -Syu failed) + cache cleaned"
+    fi
     echo ""
     echo -e "  ${YELLOW}Next steps:${NC}"
     echo -e "  1. Customise system (drivers, software, configuration)"
     echo -e "  2. Shut down the VM"
-    echo -e "  3. In the ThinForge UI: 'Save update' → version v1.0"
+    echo -e "  3. In the ThinForge UI: 'Save update delta & create clone' — the first run"
+    echo -e "     creates the baseline; the version (vYYYY.MM.DD-NNN) is assigned automatically"
     echo -e "  4. Deploy clones to clients"
     echo ""
 }
@@ -528,12 +557,15 @@ case "$ACTION" in
         echo "Usage:"
         echo "  install-manjaro.sh prepare              Prepare Calamares (before the installer)"
         echo "  install-manjaro.sh finish [--server=URL] Set up GRUB + agent (after the installer)"
+        echo "      --server=URL only sets the VM's NTP time source (the host of the URL);"
+        echo "      the agent's server URL always comes from advanced/server_url on the Tools-ISO."
         echo ""
         echo "Workflow:"
+        echo "  0. Click 'Create base HD' in the ThinForge UI (cloning VM card)"
         echo "  1. Boot from Manjaro Live-ISO"
         echo "  2. Mount Tools-ISO:    sudo mount /dev/sr1 /mnt"
         echo "  3. Prepare:            sudo bash /mnt/install-manjaro.sh prepare"
-        echo "  4. Start Manjaro installer and install (choose btrfs!)"
+        echo "  4. Start the installer: manual partitioning, partition 3 stays (btrfs!)"
         echo "  5. Boot into the new system"
         echo "  6. Mount Tools-ISO:    sudo mount /dev/sr1 /mnt"
         echo "  7. Finish:             sudo bash /mnt/install-manjaro.sh finish"

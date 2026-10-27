@@ -1,6 +1,7 @@
 [Unit]
 Description=ThinForge Apply Delta Update on Shutdown
-After=local-fs.target
+After=local-fs.target data.mount
+Requires=data.mount
 
 [Service]
 Type=oneshot

@@ -32,7 +32,7 @@ Nach erfolgreichem Upload/Download erscheint die ISO in der Liste.
 In der Konsole arbeitest du wie an einem physischen PC. Die Einrichtungs-Skripte liegen auf dem zweiten CD-Laufwerk **THINFORGE_TOOLS**; die Kurzanleitung `ANLEITUNG_DE.md` darauf beschreibt die Schritte je Distribution:
 
 1. **Installation vorbereiten** — bei Live-ISOs mit Calamares (Debian, Manjaro, Arch, CachyOS) im Terminal `sudo bash install-<distribution>.sh prepare` ausführen (bei Debian mit Zielplatte, z. B. `prepare /dev/vda`); bei der Debian-netinst-ISO entfällt dieser Schritt
-2. **OS installieren** — Installer mit manueller Partitionierung auf den vorbereiteten Partitionen (Root als Subvolume `@root`), Benutzer anlegen, Netzwerk. Danach VM stoppen, ISO abwählen, VM starten
+2. **OS installieren** — Installer mit manueller Partitionierung auf den vorbereiteten Partitionen (Root als Subvolume `@root`; der Debian-netinst-Installer legt stattdessen selbst `@rootfs` an, das ist richtig so), Benutzer anlegen, Netzwerk. Danach VM stoppen, ISO abwählen, VM starten
 3. **ThinForge-Agent einrichten** — im installierten System `sudo bash install-<distribution>.sh finish` von THINFORGE_TOOLS ausführen. Das Skript richtet GRUB mit Snapshots, die `/data`-Partition, SSH (nur mit Schlüssel) und den Agenten samt Signaturprüfung ein
 4. **Software einrichten** — alles was später auf jedem Client laufen soll (Browser, Office-Suite, Kiosk-Software, …)
 5. **Personalisierung entfernen** — User-spezifische Einstellungen löschen, Test-Dateien weg, Bash-History leeren
@@ -43,7 +43,7 @@ In der Konsole arbeitest du wie an einem physischen PC. Die Einrichtungs-Skripte
 
 In der Konsole regulär herunterfahren (z. B. `sudo poweroff`). Die Karte **VM erstellen** zeigt nach spätestens etwa 10 Sekunden **Gestoppt**.
 
-**Wichtig**: VM muss gestoppt sein, bevor du das Image sicherst. „VM stoppen" beendet die VM ohne Herunterfahren des Gastsystems — deshalb vorher selbst herunterfahren.
+**Wichtig**: VM muss gestoppt sein, bevor du das Image sicherst. Am sichersten fährst du das System selbst herunter. „VM stoppen" drückt für die VM den Ein/Aus-Knopf und wartet bis zu 2 Minuten; reagiert das Gastsystem nicht (etwa im Installer oder bei einem offenen Dialog), hält ThinForge die VM hart an, und ungeschriebene Daten fehlen im Image ([05](../05-cloning.md#stoppen)).
 
 ## Schritt 5 — Baseline sichern
 

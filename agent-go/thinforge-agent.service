@@ -3,12 +3,28 @@ Description=ThinForge Agent (Heartbeat + Updates)
 After=network-online.target data.mount
 Wants=network-online.target
 Requires=data.mount
+StartLimitBurst=5
+StartLimitIntervalSec=300
+OnFailure=thinforge-agent-recover.service
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
 ExecStart=/data/thinforge/thinforge-agent
 Restart=always
 RestartSec=10
+WatchdogSec=120
+TimeoutStartSec=300
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID CAP_SETFCAP CAP_MKNOD CAP_AUDIT_WRITE CAP_SYS_CHROOT CAP_KILL CAP_SYS_PTRACE
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+TasksMax=512
+OOMScoreAdjust=-500
 
 [Install]
 WantedBy=multi-user.target

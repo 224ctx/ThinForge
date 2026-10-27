@@ -35,9 +35,10 @@ Die Cloning-VM ist eine QEMU/KVM-Instanz, die auf dem Server läuft. Sie hat ein
 Im Kopf der Karte **VM erstellen** zeigt ein Chip den Zustand:
 
 - **Läuft** (grün) — VM läuft
+- **Wird heruntergefahren** (orange) — „VM stoppen" läuft, das Gastsystem fährt herunter
 - **Gestoppt** (grau) — nicht gestartet
 
-Einen eigenen Übergangszustand gibt es nicht; beim Starten und Stoppen dreht sich der jeweilige Knopf. Die Konsole erscheint erst, wenn die Bildschirmübertragung antwortet — bis dahin steht dort „Konsole wird vorbereitet".
+Beim Starten dreht sich der Knopf; beim Stoppen steht der Chip auf „Wird heruntergefahren", bis die VM aus ist. Die Konsole erscheint erst, wenn die Bildschirmübertragung antwortet — bis dahin steht dort „Konsole wird vorbereitet".
 
 ### Basis HD erstellen
 
@@ -61,11 +62,15 @@ Nach 10–30 Sekunden ist die VM bootfähig, die Konsole wird aktiv.
 
 ### Stoppen
 
-- **„VM stoppen"** — beendet die VM sofort, ohne das Gastsystem herunterzufahren. Fahre das System vorher in der Konsole selbst herunter, damit kein unsauberer Plattenstand gesichert wird
+- **„VM stoppen"** — fährt das Gastsystem sauber herunter: ThinForge drückt für die VM den Ein/Aus-Knopf und wartet bis zu 2 Minuten, bis sie sich selbst ausschaltet. Solange bleibt der Knopf gesperrt, und über den Knöpfen steht ein Hinweis. Danach meldet ThinForge „sauber heruntergefahren" — oder „hart gestoppt", wenn das Gastsystem nicht reagiert hat (etwa im Installer, im Firmware-Menü oder bei einem offenen „Herunterfahren?"-Dialog ohne Countdown); dann ist es wie ein Stromausfall, ungeschriebene Daten fehlen. Bis zum Update vom 2026-10-01 beendete der Knopf die VM immer sofort.
+- Wer sichergehen will, fährt das System vorher in der Konsole selbst herunter und stoppt erst danach.
+- Das saubere Herunterfahren braucht das cloning-vm-Image ab diesem Update; mit einem älteren meldet der Stopp „Kein QEMU-Monitor erreichbar" und hält die VM sofort hart an.
 
 ### Ressourcen
 
 Vorgabe sind 2 GB RAM (erlaubt 1–128 GB), 2 vCPUs (bis 24), 60 GB Festplatte und KVM-Beschleunigung an. RAM, CPUs und Disk-Größe stellst du pro VM direkt beim Start ein; die Vorgaben sind fest im Server hinterlegt und nicht einstellbar. Nach dem Start oder Wiederherstellen übernimmt die Karte die Werte der VM bzw. des Clones.
+
+Fehlt dem Server KVM (etwa weil er selbst eine VM ohne verschachtelte Virtualisierung ist), startet die VM trotz eingeschalteter KVM-Beschleunigung — in Software-Emulation (TCG), deutlich langsamer. Seit dem Update vom 2026-10-08 zeigt die Info-Karte der laufenden VM dann bei KVM **„Nicht verfügbar (TCG)"** mit einem Hinweis; vorher stand dort trotzdem „On".
 
 ---
 
@@ -90,11 +95,20 @@ Zwei Wege:
 
 ### Tools-ISO
 
-Die Tools-ISO wird automatisch vom Server gebaut und hängt in der laufenden Cloning-VM als zweites CD-Laufwerk (`THINFORGE_TOOLS`). Sie enthält die Einrichtungs-Skripte samt Client-Provisioning und Agent; damit richtest du im Image-System den Agenten ein, bevor du das Image sicherst ([workflows/golden-image.md](workflows/golden-image.md)). Die Clients erhalten das fertige Image danach per Deployment.
+Die Tools-ISO wird automatisch vom Server gebaut und hängt in der laufenden Cloning-VM als zweites CD-Laufwerk (`THINFORGE_TOOLS`). Sie enthält die Einrichtungs-Skripte samt Client-Provisioning und Agent; damit richtest du im Image-System den Agenten ein, bevor du das Image sicherst ([workflows/golden-image.md](workflows/golden-image.md)). Die Clients erhalten das fertige Image danach per Deployment. In ihrer Wurzel liegen außerdem die Lizenztexte (`LICENSE`, `NOTICE`, `THIRD_PARTY_LICENSES.md`, `WRITTEN_OFFER.md`) — der Agent steht unter der GPL-3.0-or-later.
 
-Die Tools-ISO wird bei jedem Start der Cloning-VM automatisch neu gebaut, außerdem nach jedem Agent-Bau oder -Upload unter **Clients → Agent**. Nach einer Zertifikats-Erneuerung oder Schlüsselrotation genügt es daher, die VM neu zu starten.
+Die Tools-ISO wird bei jedem Start der Cloning-VM automatisch neu gebaut, außerdem nach jedem Agent-Bau oder -Upload unter **Clients → Agent**. Die VM startet nur mit der frisch gebauten ISO: scheitert der Neubau, startet sie nicht, und die Meldung nennt den Grund. Nach einer Zertifikats-Erneuerung oder Schlüsselrotation genügt es daher, die VM neu zu starten.
 
-Die ISO trägt das Agent-Binary des Servers samt Signatur. Liegt auf dem Server kein gebautes oder kein signiertes Agent-Binary, wird keine ISO gebaut und die Cloning-VM startet nicht; die Meldung nennt den fehlenden Schritt (unter **Clients → Agent** bauen bzw. **Signieren**). Beim Einrichten prüft das Provisioning-Script die Signatur und installiert nur einen passend signierten Agenten.
+Die ISO trägt das Agent-Binary des Servers samt Signatur. Liegt auf dem Server kein gebautes oder kein signiertes Agent-Binary, wird keine ISO gebaut und die Cloning-VM startet nicht; die Meldung nennt den fehlenden Schritt (unter **Clients → Agent** bauen bzw. **Signieren**). Signieren und einen fehlenden Signierschlüssel erzeugen darf nur ein Admin; die Meldung sagt das auch. Beim Einrichten prüft das Provisioning-Script die Signatur und installiert nur einen passend signierten Agenten.
+
+## Tab: VDI-Clients
+
+Hier legst du die Installationspakete der VDI-Clients ab, die ThinForge aus Lizenzgründen nicht mitbringt: Citrix Workspace App, Citrix USB-Support (ctxusb), Parallels Client und Omnissa Horizon Client. Je Client gibt es genau einen Platz; die Tabelle zeigt, ob ein Paket vorhanden ist, mit Datei, Größe und Hochladezeitpunkt.
+
+- **Hochladen** — Citrix, Citrix USB-Support und Parallels nehmen eine `.deb`-Datei, Omnissa eine `.bundle`- oder `.deb`-Datei. Der Server speichert das Paket unter einem festen Namen; ein neuer Upload ersetzt das vorhandene.
+- **Löschen** — über das Papierkorb-Symbol, nach Rückfrage.
+
+Hochgeladene Pakete kommen beim nächsten Start der Cloning-VM auf die Tools-ISO (Ordner `DebianVDIClients/`). Am Ende von `install-debian-minimal.sh finish` bietet das Skript an, sie im Image zu installieren; von Hand geht das mit `DebianVDIClients/install-vdi-clients-debian.sh` von der Tools-ISO. Hochladen und Löschen dürfen Admins und Operatoren.
 
 ---
 
@@ -146,7 +160,9 @@ Der Tab **Captures** erfasst dagegen die Festplatte eines **physischen Clients**
 4. **„Gerät jetzt neu starten"** (Vorgabe an): Ein online gemeldetes Gerät startet per SSH sofort in die Aufnahme, ein ausgeschaltetes beim nächsten Einschalten. Ohne die Option startest du es selbst neu.
 5. **„Capture starten"**
 
-Der Vorgang läuft im Hintergrund; der Stand (Wartend, Läuft, Fertig, Fehlgeschlagen, Abgebrochen) steht in der Liste **Capture-Jobs** daneben. Dort lässt sich ein Job abbrechen, neu starten oder löschen. Das fertige Capture erscheint im Tab **Clones** mit der Quelle **HW Clone**; **„Importieren"** in der Job-Liste registriert es unter einem Image-Namen (1–80 Zeichen) als ausrollbares Image, die Version wird automatisch vergeben.
+Der Vorgang läuft im Hintergrund; der Stand (Wartend, Läuft, Fertig, Fehlgeschlagen, Abgebrochen) steht in der Liste **Capture-Jobs** daneben. Dort lässt sich ein Job abbrechen, neu starten oder löschen; **Neu starten** bereitet das Gerät erneut vor und startet ein online gemeldetes gleich per SSH in die Aufnahme. Das fertige Capture erscheint im Tab **Clones** mit der Quelle **HW Clone**; **„Importieren"** in der Job-Liste registriert es unter einem Image-Namen (1–80 Zeichen) als ausrollbares Image, die Version wird automatisch vergeben.
+
+Ein Gerät, das in einem laufenden Klon-Deployment steckt, lässt sich nicht aufnehmen — und ein Gerät mit laufender Aufnahme bekommt kein Deployment. Beides würde den Starteintrag des anderen Vorgangs überschreiben; die Oberfläche meldet es, bis der Vorgang fertig oder abgebrochen ist.
 
 ---
 
@@ -179,17 +195,17 @@ Die Tabelle zeigt je Clone Version, Quelle (**VM Clone** oder **HW Clone**), Nam
 
 - **Zuordnen** — hängt den Clone an eine andere Stelle im Baum (siehe unten)
 - **Wiederherstellen zur VM** — spielt den Clone wieder auf die Cloning-VM zurück (die VM muss gestoppt sein). So lässt sich jederzeit zu einer älteren Version zurückwechseln. Achte aber darauf, dass auch die Clients auf der älteren Version landen — entweder über ein neues Deployment oder über den Rollback (der nur die jeweils vorherige Version wiederherstellen kann).
-- **Exportieren** — Download als 7z-Archiv, optional mit Passwort verschlüsselt (mindestens 4 Zeichen). Unverschlüsselt sind im Image gespeicherte Anmeldedaten für jeden lesbar, der die Datei erhält.
-- **Löschen** — zeigt vorher die Folgen an. Gesperrt, solange ein laufendes Deployment den Clone nutzt oder ein aktiver Rollout diese Version als Ziel hat. Laufen Clients auf der Version, musst du die Auswirkung bestätigen; beim letzten Clone einer Kette lassen sich die zugehörigen Deltas mitlöschen.
+- **Exportieren** — Download als 7z-Archiv, optional mit Passwort verschlüsselt (mindestens 4 Zeichen, nur ASCII-Zeichen — keine Umlaute). Unverschlüsselt sind im Image gespeicherte Anmeldedaten für jeden lesbar, der die Datei erhält.
+- **Löschen** — zeigt vorher die Folgen an. Gesperrt, solange ein laufendes Deployment den Clone nutzt oder eine aktive Update-Zuweisung (Tab **Updates**) diese Version als Ziel hat. Laufen Clients auf der Version, musst du die Auswirkung bestätigen; beim letzten Clone einer Kette lassen sich die zugehörigen Deltas mitlöschen.
 
-Über **„Importieren"** im Kopf des Tabs lädst du ein exportiertes 7z-Archiv wieder hoch (Passwort nur bei verschlüsseltem Export). Ist der Linien-Name schon vergeben, fragt der Dialog nach einem neuen Namen.
+Über **„Importieren"** im Kopf des Tabs lädst du ein exportiertes 7z-Archiv wieder hoch (Passwort nur bei verschlüsseltem Export); der Clone behält dabei seine Version. Ist der Linien-Name schon vergeben, fragt der Dialog nach einem neuen Namen. Archiv und entpackter Clone liegen während des Imports nebeneinander auf dem Server — gebraucht wird also etwa der doppelte Platz des Archivs plus 2 GB Reserve. ThinForge prüft das zu Beginn des Hochladens und noch einmal vor dem Entpacken; reicht der Platz nicht, bricht der Import mit einer Meldung ab, die freien und nötigen Platz nennt, und es bleibt nichts liegen.
 
 ### Zuordnen / Einsortieren
 
 Manchmal sollen Clones im Baum umgeordnet werden — z. B. wenn ein re-importierter Clone an eine andere Position gehört, oder wenn ein Clone ohne Parent als Fortsetzung einer bestehenden Kette einsortiert werden soll.
 
 - **„Als Kind zuordnen"** — hängt den Clone als nächstes Kind an einen gewählten Parent
-- **„Vor Clone einordnen"** — fügt den Clone vor einem bestehenden Clone ein (nur wenn eine Versionsnummer im Namen erkennbar ist und die Zielversion im selben Root-Nummernkreis liegt)
+- **„Vor Clone einordnen"** — fügt den Clone vor einem bestehenden Clone ein. Angeboten wird das nur, wenn im Namen eine Version steht, die vor der Zielversion liegt: eine Datumsversion wie `v2026.05.07-001` oder eine ältere Nummer wie `v1.002`. Bei Datumsversionen geht das nur innerhalb derselben Image-Linie — der Name besteht aus dem Linien-Namen und der Version (z. B. „Manjaro v2026.05.07-001" vor einem Clone der Linie „Manjaro"), und der Clone übernimmt danach den Linien-Namen. Bei älteren Nummern muss die Hauptnummer gleich sein (`v1.…` vor `v1.…`), der Name bleibt.
 - **„Zuordnung entfernen"** — nur bei Clones mit Parent: nimmt den Clone aus seiner Kette, macht ihn zu einer neuen eigenständigen Baseline
 
 Diese Operationen sind **rein logisch** — sie ändern nur Metadaten, nicht das Image selbst. Die Delta-Erzeugung folgt weiter der physischen Snapshot-Kette aus dem Capture-Moment.

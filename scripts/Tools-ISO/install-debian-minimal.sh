@@ -3,42 +3,32 @@
 # ThinForge — Debian-Minimal-Installation (debian-13.4.0-amd64-netinst)
 #
 # Variante fuer die netinst-ISO: kein Live-System, kein Calamares — nur der
-# klassische Debian-Installer (d-i). Workflow gespiegelt zu install-debian.sh,
-# Calamares-spezifische Schritte entfernt; prepare laeuft aus dem d-i-
-# Rescue-Mode statt aus Live-Env.
+# klassische Debian-Installer (d-i). Gespiegelt zu install-debian.sh finish.
+# Einen prepare-Modus gibt es hier nicht: das Plattenlayout legt das
+# ThinForge-UI an ("Basis HD erstellen"), der d-i nutzt es direkt.
 #
-# Zwei Modi:
-#
-#   VORHER (vor dem d-i-Partitionierer, aus dem Rescue-Mode):
-#     sudo bash install-debian-minimal.sh prepare /dev/vda
-#     → Partitioniert die Disk: ESP + System (btrfs) + Data (btrfs)
-#     → Erstellt das Root-Subvolume (Single-Root-Layout) auf System,
-#       @data auf der Data-Partition (d-i kann das nicht ootb).
-#     → Danach den d-i fortfahren lassen, "Manuell" waehlen,
-#       Partitionen wie von prepare angelegt zuweisen (KEIN Reformat).
-#
-#   NACHHER (nach d-i-Installation, im installierten System):
+# Ein Modus (nach der d-i-Installation, im installierten System):
 #     sudo bash install-debian-minimal.sh finish [--server=https://...]
+#     (--server setzt nur die Zeitquelle der VM; die Server-URL des Agents
+#      kommt immer aus advanced/server_url der Tools-ISO)
 #     → GRUB mit ThinForge Boot-Logik
 #     → ThinForge Agent installieren
 #     → Identisch zu install-debian.sh finish
 #
-# Workflow von debian-13.4.0-amd64-netinst.iso:
-#   1. Boot-Menue → "Advanced options" → "Rescue mode"
-#   2. Rescue-Schritte durchklicken bis "Execute a shell in the installer
-#      environment" → "Continue"
-#   3. Im BusyBox-Shell:
-#        modprobe btrfs
-#        # SCRIPT_QUELLE: USB-Stick mounten oder via wget aus Mgmt-Netz holen
-#        bash install-debian-minimal.sh prepare /dev/vda
-#   4. Reboot, normaler d-i-Boot
-#   5. Im d-i: "Partitionen manuell aendern":
+# Workflow von debian-13.4.0-amd64-netinst.iso (wie ANLEITUNG_DE.md):
+#   0. Im ThinForge-UI auf der Karte der Cloning-VM "Basis HD erstellen":
+#      ESP + System (btrfs) + Data (btrfs, @data)
+#   1. VM mit der netinst-ISO booten, normaler d-i (kein Rescue-Mode noetig)
+#   2. Im d-i: "Partitionen manuell aendern":
 #        Partition 1 → /boot/efi  (FAT32 erhalten, NICHT formatieren)
-#        Partition 2 → /          (btrfs erhalten, KEIN Reformat,
-#                                  Subvolume-Mount-Option: subvol=@root)
+#        Partition 2 → /          (btrfs; leer, Formatieren schadet nicht.
+#                                  KEINE Mount-Option: der d-i legt das
+#                                  Subvolume @rootfs selbst an)
 #        Partition 3 → NICHT verwenden (bleibt fuer /data)
-#   6. Installation durchlaufen, ins neue System booten
-#   7. sudo bash install-debian-minimal.sh finish
+#   3. Tasksel: nur "standard system utilities" (minimal)
+#   4. Installation durchlaufen, ins neue System booten
+#   5. Tools-ISO einhaengen und abschliessen:
+#        sudo mount /dev/sr1 /mnt && sudo bash /mnt/install-debian-minimal.sh finish
 #
 
 set -euo pipefail
@@ -540,6 +530,38 @@ offer_vdi_install() {
 # erstellen', der netinst-d-i nutzt es direkt — kein Calamares-Zwischen-
 # schritt noetig wie bei der Live-ISO-Variante.)
 
+# Nimmt zurueck, was der su-Bootstrap in do_finish fuer den Neustart vergibt:
+# die NOPASSWD-Datei /etc/sudoers.d/thinforge-bootstrap und die Mitgliedschaft
+# des aufrufenden Kontos in der Gruppe 'sudo'. Dieses Konto ist oft das
+# Autologin-/Kiosk-Konto; bis 2026-10-10 blieb es dauerhaft in 'sudo', auch
+# wenn es in der Checkliste (configure_sudo_users) nicht angehakt war — wer an
+# der Kiosk-Sitzung sass, bekam mit dem Konto-Passwort root.
+# Die Mitgliedschaft bleibt nur, wenn das Konto vorher schon in 'sudo' stand
+# ($2 = 1) oder in /etc/sudoers.d/thinforge-admins steht, also ausgewaehlt
+# wurde. Laeuft nach dem Neustart und als EXIT-Trap bei jedem vorzeitigen Ende.
+# Bewusst ohne Pipe: unter `set -o pipefail` kann `grep -q` den Vorgaenger per
+# SIGPIPE beenden und die Pipe als fehlgeschlagen melden, obwohl sie traf.
+revoke_bootstrap_sudo() {
+    local user="${1:-}" was_member="${2:-0}"
+    rm -f /etc/sudoers.d/thinforge-bootstrap
+    [ -n "$user" ] || return 0
+    [ "$was_member" = "1" ] && return 0
+    case " $(id -nG "$user" 2>/dev/null || true) " in
+        *" sudo "*) ;;
+        *) return 0 ;;   # nie aufgenommen (Abbruch davor) — nichts zu tun
+    esac
+    if awk -v u="$user" '$1 == u { found = 1 } END { exit !found }' \
+            /etc/sudoers.d/thinforge-admins 2>/dev/null; then
+        log "'$user' was selected for sudo — keeping group 'sudo'."
+        return 0
+    fi
+    if gpasswd -d "$user" sudo >/dev/null 2>&1; then
+        log "'$user' removed from group 'sudo' again (only needed for the restart)."
+    else
+        warn "Could not remove '$user' from group 'sudo' — check with: id $user"
+    fi
+}
+
 do_finish() {
     # Vor dem Bootstrap-Block: dessen su-Neustart reicht den Wert als
     # --server=… weiter. Stand die Zuweisung erst dahinter, las der Neustart
@@ -555,28 +577,43 @@ do_finish() {
         orig_user=$(logname 2>/dev/null || true)
         
         if [ -n "$orig_user" ] && [ "$orig_user" != "root" ]; then
-            log "Aufruf über 'su' erkannt. Richte sudo für '$orig_user' ein..."
+            log "Aufruf über 'su' erkannt. Richte für den Neustart vorübergehend sudo für '$orig_user' ein..."
             
             # Sudo sicherstellen (auf minimalen Installationen oft nicht vorhanden)
             command -v sudo >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq sudo; }
-            
-            # User in die Sudo-Gruppe aufnehmen
+
+            # Vorzustand merken: stand das Konto schon in 'sudo', bleibt es
+            # dort (revoke_bootstrap_sudo). Ohne Pipe, siehe dort.
+            local was_sudo_member=0
+            case " $(id -nG "$orig_user" 2>/dev/null || true) " in
+                *" sudo "*) was_sudo_member=1 ;;
+            esac
+
+            # Ab hier dürfen weder die NOPASSWD-Datei noch die
+            # Gruppenmitgliedschaft den Block unter KEINEN Umständen überleben:
+            # die Datei gibt einem Desktop-Konto passwortloses root, die Gruppe
+            # root mit dessen Passwort, und dieses Konto ist oft dasselbe, dem
+            # configure_autologin LightDM-Autologin einrichtet — bliebe beides
+            # liegen und würde die VM so geklont, hätte jeder, der an einer
+            # Kiosk-Sitzung sitzt, root auf jedem Thin Client. Die
+            # Aufräumzeile am Ende des Blocks läuft nur im NEU gestarteten
+            # Prozess. Deshalb VOR beidem ein EXIT-Trap, der jeden vorzeitigen
+            # Abbruch bis zum `su` abdeckt (z. B. ein Aus durch
+            # `set -euo pipefail` in den Zeilen darunter); die Werte stehen
+            # fest im Trap, er braucht keine lokalen Variablen mehr.
+            trap "revoke_bootstrap_sudo $(printf '%q' "$orig_user") $was_sudo_member" EXIT
+
+            # Für die Dauer des Laufs in die Sudo-Gruppe aufnehmen. Der
+            # Neustart selbst läuft über die NOPASSWD-Datei; die Gruppe ist der
+            # Rückfall, falls /etc/sudoers die sudoers.d-Dateien nicht liest.
+            # Am Ende nimmt revoke_bootstrap_sudo sie wieder zurück, außer das
+            # Konto wurde in der Checkliste ausgewählt (seit 2026-10-10; vorher
+            # blieb sie dauerhaft).
             usermod -aG sudo "$orig_user" 2>/dev/null || true
-            
+
             # Temporär NOPASSWD vergeben, damit der Neustart ohne TTY/Passwort-Prompt sofort durchläuft
             echo "$orig_user ALL=(ALL:ALL) NOPASSWD: ALL" > "/etc/sudoers.d/thinforge-bootstrap"
             chmod 0440 "/etc/sudoers.d/thinforge-bootstrap"
-
-            # Ab hier darf die Datei den Block unter KEINEN Umständen überleben:
-            # sie gibt einem Desktop-Konto passwortloses root, und dieses Konto
-            # ist dasselbe, dem configure_autologin gleich LightDM-Autologin
-            # einrichtet — bliebe sie liegen und würde die VM so geklont, hätte
-            # jeder, der an einer Kiosk-Sitzung sitzt, root ohne Passwort auf
-            # jedem Thin Client. Die Aufräumzeile am Ende des Blocks läuft nur
-            # im NEU gestarteten Prozess. Deshalb hier ein EXIT-Trap, der jeden
-            # vorzeitigen Abbruch zwischen dieser Zeile und dem `su` abdeckt
-            # (z. B. ein Aus durch `set -euo pipefail` in den Zeilen darunter).
-            trap 'rm -f /etc/sudoers.d/thinforge-bootstrap' EXIT
 
             log "Stelle Umgebungsvariablen für die grafische Oberfläche wieder her..."
             local envpid
@@ -611,10 +648,25 @@ do_finish() {
             # entfernt die Datei am Ende des Blocks selbst; sudo prüft die
             # sudoers nur einmal beim Aufruf, das Entziehen währenddessen
             # stört ihn also nicht.
+            #
+            # Die Befehlszeile fuer `su -c` wird gequotet gebaut: su reicht sie
+            # an `/bin/bash -c` weiter, und diese Shell zerlegt sie neu. Bis
+            # 2026-09-30 standen $0 und der --server-Wert nur in doppelten
+            # Anfuehrungszeichen darin — ein `"`, `$` oder Backtick in
+            # Skriptpfad oder URL zerbrach den Neustart oder wurde von dieser
+            # Shell ausgewertet. `printf %q` quotet genau fuer bash.
+            local restart_cmd
+            restart_cmd="sudo -E bash $(printf '%q' "$0") finish"
+            if [ -n "$THINFORGE_SERVER" ]; then
+                restart_cmd+=" $(printf '%q' "--server=$THINFORGE_SERVER")"
+            fi
             local bootstrap_rc=0
-            su -s /bin/bash "$orig_user" -c "sudo -E bash \"$0\" finish ${THINFORGE_SERVER:+--server=\"$THINFORGE_SERVER\"}" \
+            su -s /bin/bash "$orig_user" -c "$restart_cmd" \
                 || bootstrap_rc=$?
-            rm -f /etc/sudoers.d/thinforge-bootstrap
+            # NOPASSWD-Datei weg, Gruppe 'sudo' zurück — außer das Konto wurde
+            # im Neustart in der Checkliste ausgewählt (thinforge-admins) oder
+            # stand vorher schon darin. Gilt auch, wenn der Neustart scheiterte.
+            revoke_bootstrap_sudo "$orig_user" "$was_sudo_member"
             trap - EXIT
             if [ "$bootstrap_rc" -ne 0 ]; then
                 error "Neustart über sudo fehlgeschlagen (Status $bootstrap_rc). Temporäre sudo-Rechte wurden zurückgenommen."
@@ -644,17 +696,27 @@ do_finish() {
     configure_sudo_users
     run_debian_cleanup
 
-    # Pruefen ob btrfs mit @root
-    local root_source
-    root_source=$(findmnt -n -o SOURCE / 2>/dev/null || echo "")
-    if echo "$root_source" | grep -q "@root"; then
-        log "Root subvolume: @root detected"
-    elif echo "$root_source" | grep -q "@"; then
-        warn "Root subvolume is '@' instead of '@root' — minimal prepare was not executed."
-        warn "Delta updates still work if the subvolume is named consistently."
-    else
-        warn "No btrfs subvolume detected as root: $root_source"
-    fi
+    # Root-Subvolume pruefen. Der d-i legt das Wurzeldateisystem auf btrfs
+    # selbst im Subvolume @rootfs an (fstab: subvol=@rootfs); eine Mount-
+    # Option dafuer laesst sich im d-i nicht eingeben. Bis 2026-10-01 suchte
+    # diese Pruefung per grep nach "@root" — das traf auch "@rootfs", meldete
+    # "@root detected", und die Warnung verlangte ein subvol=@root, das es im
+    # d-i nicht gibt. Jetzt zaehlt der Name, den der Agent kennt
+    # (applydelta.DetectRootSubvol: @rootfs, @root, @).
+    local root_subvol
+    root_subvol=$(findmnt -n -o FSROOT / 2>/dev/null || echo "")
+    root_subvol="${root_subvol#/}"
+    case "$root_subvol" in
+        @rootfs|@root|@)
+            log "Root subvolume: ${root_subvol}"
+            ;;
+        "")
+            warn "/ is not on a btrfs subvolume ($(findmnt -n -o SOURCE / 2>/dev/null || echo unknown)) — snapshots and delta updates need one."
+            ;;
+        *)
+            warn "Root subvolume is '${root_subvol}' — the agent only knows @rootfs, @root and @, delta updates will not find it."
+            ;;
+    esac
 
     # ── GRUB konfigurieren ───────────────────────────────────────────
 
@@ -743,7 +805,7 @@ do_finish() {
     # grub-btrfsd DEAKTIVIEREN
     systemctl disable grub-btrfsd.service 2>/dev/null || true
     systemctl stop grub-btrfsd.service 2>/dev/null || true
-    log "grub-btrfsd disabled (GRUB is updated by agent-apply-delta.sh)"
+    log "grub-btrfsd disabled (GRUB is updated by the agent when it applies an update)"
 
 
     # overlayfs in initramfs aktivieren — ermoeglicht das Booten von
@@ -807,8 +869,8 @@ RUNTIMEEOF
     log "GRUB config generated (update-grub)"
 
     # ── Data-Partition einhaengen ────────────────────────────────────
-    # Die Data-Partition wurde bereits in prepare erstellt (Partition 3).
-    # Hier wird sie nur in fstab eingetragen und gemountet.
+    # Die Data-Partition legt das UI an ("Basis HD erstellen", Partition 3,
+    # Label "Daten"). Hier wird sie nur in fstab eingetragen und gemountet.
 
     if mountpoint -q /data 2>/dev/null; then
         log "Data partition already mounted: /data"
@@ -863,7 +925,10 @@ RUNTIMEEOF
     # NetBird-Repo wird hier nicht eingebunden — NetBird wird unten via
     # offiziellem Install-Skript installiert (Tools-ISO-Live-System hat
     # Internet; der spätere Klon-Betrieb läuft im LAN ohne Internet).
-    local EXTRA_PKGS=(nfs-common zstd curl jq python3 x11-utils minisign chrony zenity yad)
+    # tpm2-tools: der Agent liest den TPM-Zustand ueber `tpm2_getcap`
+    # (agent-go/internal/tpm/tpm.go::Present); ohne das Paket meldet er
+    # auch auf Geraeten mit TPM "kein TPM" (tpm_present=false).
+    local EXTRA_PKGS=(nfs-common zstd curl jq tpm2-tools python3 x11-utils minisign chrony zenity yad)
     local TO_INSTALL=()
 
     for pkg in "${EXTRA_PKGS[@]}"; do
@@ -962,10 +1027,18 @@ NTPCONF
 
     # ── SSH-Server installieren (Key kommt vom Agent) ──────────────
 
+    # Ungeschuetzt beendete ein nicht erreichbares Repo hier do_finish unter
+    # `set -e` (wie beim dist-upgrade, T417) — Agent, SSH-Haertung, Update,
+    # initramfs und Branding blieben dann aus. Jetzt Warnung statt Abbruch;
+    # 1-create-client-management.sh versucht openssh-server ohnehin erneut.
     if ! command -v sshd &>/dev/null; then
         log "Installing openssh-server..."
-        apt-get update -qq
-        apt-get install -y -qq openssh-server
+        apt-get update -qq || warn "apt-get update failed — package sources may not be reachable"
+        if apt-get install -y -qq openssh-server; then
+            log "openssh-server installed."
+        else
+            warn "openssh-server could not be installed — the agent setup tries again."
+        fi
     fi
     # Noch NICHT konfigurieren oder neustarten — der Agent installiert
     # zuerst den SSH-Key, dann wird sshd sicher konfiguriert.
@@ -989,9 +1062,10 @@ NTPCONF
 
     if [ -n "$INSTALL_SCRIPT" ] && [ -f "$INSTALL_SCRIPT" ]; then
         log "Agent script found: $INSTALL_SCRIPT"
-        if [ -n "$THINFORGE_SERVER" ]; then
-            export THINFORGE_SERVER
-        fi
+        # Kein THINFORGE_SERVER-Export mehr: 1-create-client-management.sh
+        # liest die Server-URL nur aus advanced/server_url der ISO und hat die
+        # Variable nie ausgewertet. --server setzt allein die Zeitquelle
+        # (NTP-Schritt oben).
         bash "$INSTALL_SCRIPT"
     else
         # Curl-Bootstrap-Modus wurde aus Sicherheitsgruenden entfernt
@@ -1020,18 +1094,37 @@ NTPCONF
     fi
     systemctl enable ssh 2>/dev/null || true
     systemctl restart ssh 2>/dev/null || true
-    log "SSH key-only auth enabled"
+    # Erfolg nur melden, wenn sshd wirklich laeuft — ohne openssh-server
+    # stand hier und im Banner bisher trotzdem "Key-only auth enabled".
+    if [ -f /etc/ssh/sshd_config ] && systemctl is-active --quiet ssh 2>/dev/null; then
+        SSH_ENABLED=1
+        log "SSH key-only auth enabled"
+    else
+        SSH_ENABLED=0
+        warn "SSH is not running (openssh-server missing or not started) — the server cannot reach this machine via SSH."
+    fi
 
     # ── System auf den neuesten Stand bringen ────────────────────────
 
     log "Updating system (apt-get dist-upgrade)..."
-    apt-get update -qq
+    # Gleiche Struktur wie install-debian.sh (b4bc5e3d): ungeschuetzt beendete
+    # ein nicht erreichbares Repo hier do_finish unter `set -e` — und damit
+    # blieben update-initramfs (backt den overlay-snap-ro-Hook ein) und das
+    # Branding aus. Und "System updated." stand frueher hinter `|| warn`,
+    # lief also auch nach einem gescheiterten Upgrade.
+    apt-get update -qq || warn "apt-get update failed — package sources may not be reachable"
     # --force-confdef/--force-confold: bei geaenderten conffiles ohne Rueckfrage
     # die installierte Version behalten (kein dpkg-Prompt, der ohne TTY haengt).
-    apt-get dist-upgrade -y -qq \
+    if apt-get dist-upgrade -y -qq \
         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
-        2>/dev/null || warn "System update failed"
-    log "System updated."
+        2>/dev/null
+    then
+        SYSTEM_UPDATED=1
+        log "System updated."
+    else
+        SYSTEM_UPDATED=0
+        warn "System update failed — the system is NOT fully patched."
+    fi
 
     # ── Paket-Cache aufraeumen ───────────────────────────────────────
 
@@ -1081,14 +1174,25 @@ NTPCONF
     echo ""
     echo -e "  GRUB:       ThinForge boot logic with rollback"
     echo -e "  Agent:      Installed"
-    echo -e "  SSH:        Key-only auth enabled"
+    if [ "${SSH_ENABLED:-0}" = "1" ]; then
+        echo -e "  SSH:        Key-only auth enabled"
+    else
+        echo -e "  SSH:        ${YELLOW}NOT running${NC} (openssh-server missing or not started)"
+    fi
     echo -e "  Data:       /data mounted"
-    echo -e "  System:     Updated + cache cleaned"
+    # Nicht behaupten, was nicht stimmt: bei fehlgeschlagenem dist-upgrade
+    # stand hier bisher trotzdem "Updated".
+    if [ "${SYSTEM_UPDATED:-0}" = "1" ]; then
+        echo -e "  System:     Updated + cache cleaned"
+    else
+        echo -e "  System:     ${YELLOW}NOT fully updated${NC} (dist-upgrade failed) + cache cleaned"
+    fi
     echo ""
     echo -e "  ${YELLOW}Next steps:${NC}"
     echo -e "  1. Customize system (drivers, software, configuration)"
     echo -e "  2. Shut down the VM"
-    echo -e "  3. In the ThinForge UI: 'Save update' → version v1.0"
+    echo -e "  3. In the ThinForge UI: 'Save update delta & create clone' — the first run"
+    echo -e "     creates the baseline; the version (vYYYY.MM.DD-NNN) is assigned automatically"
     echo -e "  4. Deploy clone to clients"
     echo ""
 
@@ -1119,11 +1223,13 @@ case "$ACTION" in
         echo ""
         echo "Usage:"
         echo "  install-debian-minimal.sh finish [--server=URL]  Set up GRUB + agent (after d-i)"
+        echo "      --server=URL only sets the VM's NTP time source (the host of the URL);"
+        echo "      the agent's server URL always comes from advanced/server_url on the Tools-ISO."
         echo ""
         echo "Workflow (debian-13.4.0-amd64-netinst.iso):"
         echo "  0. Click 'Create base HD' in the ThinForge UI (cloning VM card)"
         echo "  1. Boot VM with netinst-ISO, normal d-i"
-        echo "  2. Manual partitioning, partition 2 with mount option subvol=@root"
+        echo "  2. Manual partitioning, partition 2 as / (btrfs, no mount option — d-i creates @rootfs)"
         echo "  3. Tasksel: only 'standard system utilities' (minimal)"
         echo "  4. Boot into the new system"
         echo "  5. Finish:             sudo bash install-debian-minimal.sh finish"

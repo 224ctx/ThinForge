@@ -39,7 +39,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_clients_total",
+          "expr": "thinforge_clients_count",
           "instant": true,
           "legendFormat": "Total"
         }
@@ -66,7 +66,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_clients_by_status{status=\"online\"}",
+          "expr": "thinforge_clients_total{status=\"online\"}",
           "instant": true,
           "legendFormat": "Online"
         }
@@ -97,7 +97,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_clients_by_status{status=\"offline\"}",
+          "expr": "thinforge_clients_total{status=\"offline\"}",
           "instant": true,
           "legendFormat": "Offline"
         }
@@ -128,7 +128,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_alert_incidents_by_status{status=\"active\"}",
+          "expr": "thinforge_alert_incidents{status=\"active\"}",
           "instant": true,
           "legendFormat": "Active Incidents"
         }
@@ -155,7 +155,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_images_by_status{status=\"ready\"}",
+          "expr": "thinforge_images{status=\"ready\"}",
           "instant": true,
           "legendFormat": "Ready Images"
         }
@@ -178,8 +178,6 @@
         "overrides": [
           { "matcher": { "id": "byName", "options": "online" }, "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }] },
           { "matcher": { "id": "byName", "options": "offline" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "error" }, "properties": [{ "id": "color", "value": { "fixedColor": "dark-red", "mode": "fixed" } }] },
-          { "matcher": { "id": "byName", "options": "updating" }, "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }] },
           { "matcher": { "id": "byName", "options": "cloning" }, "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }] }
         ]
       },
@@ -196,7 +194,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_clients_by_status",
+          "expr": "thinforge_clients_total",
           "instant": true,
           "legendFormat": "{{status}}"
         }
@@ -224,7 +222,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_alert_incidents_by_status",
+          "expr": "thinforge_alert_incidents",
           "instant": true,
           "legendFormat": "{{status}}"
         }
@@ -283,20 +281,21 @@
               { "color": "red", "value": 0.9 }
             ]
           },
-          "unit": "bytes",
-          "min": 0
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
         },
         "overrides": []
       },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 21,
       "options": { "displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0, "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true, "text": {} },
-      "title": "RAM Used by Client",
+      "title": "RAM Usage by Client",
       "type": "bargauge",
       "targets": [
         {
           "datasource": { "type": "prometheus" },
-          "expr": "thinforge_client_ram_used_bytes",
+          "expr": "thinforge_client_ram_used_bytes / thinforge_client_ram_total_bytes",
           "instant": true,
           "legendFormat": "{{hostname}}"
         }

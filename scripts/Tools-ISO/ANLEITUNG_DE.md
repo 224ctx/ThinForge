@@ -15,7 +15,8 @@
 2. Im Dateimanager auf THINFORGE_TOOLS navigieren, Terminal oeffnen
 3. Vorbereiten:     sudo bash install-debian.sh prepare /dev/vda
 4. Debian-Installer starten (Calamares), Manuelle Partitionierung waehlen,
-   Partition 2 mit Mount-Option subvol=@root als / zuweisen
+   Partition 2 als / (btrfs) zuweisen — keine Mount-Option: das Subvolume
+   @root legt Calamares dank prepare (mount.conf) selbst an
 5. Ins neue System booten
 6. Im Dateimanager auf THINFORGE_TOOLS navigieren, Terminal oeffnen
 7. Abschliessen:    sudo bash install-debian.sh finish
@@ -39,7 +40,7 @@ Richtet das installierte System ein:
 | GRUB | 2s Timeout, Snapshot-Menue sichtbar |
 | grub-btrfs | Snapshots als Boot-Eintraege |
 | Data-Partition | Partition 3 aus Schritt 0 (Label „Daten") als `/data` (Subvolume `@data`) in fstab eintragen und einhaengen; fehlt sie, bricht `finish` vor der Agent-Installation ab |
-| Pakete | nfs-common, zstd, curl, jq, python3, x11-utils, minisign, chrony, zenity, yad |
+| Pakete | nfs-common, zstd, curl, jq, tpm2-tools, python3, x11-utils, minisign, chrony, zenity, yad |
 | NetBird-Agent | VPN-Client ueber das offizielle Installationsskript (`pkgs.netbird.io/install.sh`); Dienst auf Relay-Zwang und IPv6-aus umgestellt, danach deaktiviert und gestoppt (aktiviert wird er erst, wenn ThinForge das Geraet fuer das VPN freischaltet); `/etc/netbird` und `/var/lib/netbird` zeigen auf `/data/netbird`, damit die Anmeldung Delta-Updates ueberlebt |
 | SSH | Key-only Auth, Root per Key |
 | Agent | ThinForge Agent + Delta-Update-Service. Das Agent-Binary wird vorher mit `minisign` gegen seine Signatur und den Signierschluessel des Servers geprueft; passt sie nicht, bricht `finish` ab (siehe unten) |
@@ -62,8 +63,9 @@ netinst-ISO bereits in der Beschaffung vorhanden ist.
 1. VM mit netinst-ISO booten, normaler d-i (kein Rescue noetig)
 2. Im d-i: "Partitionen manuell aendern":
      Partition 1 -> /boot/efi   (FAT32 erhalten, NICHT formatieren)
-     Partition 2 -> /            (btrfs erhalten, NICHT formatieren,
-                                  Mount-Option subvol=@root setzen)
+     Partition 2 -> /            (btrfs; die Partition ist leer, Formatieren
+                                  schadet nicht. Keine Mount-Option setzen:
+                                  der d-i legt das Subvolume @rootfs selbst an)
      Partition 3 -> NICHT verwenden (bleibt fuer /data)
 3. Tasksel: nur "standard system utilities" (minimal)
 4. Installation durchlaufen, ins neue System booten
@@ -71,6 +73,13 @@ netinst-ISO bereits in der Beschaffung vorhanden ist.
      sudo mkdir -p /mnt/tools && sudo mount /dev/sr1 /mnt/tools
      sudo bash /mnt/tools/install-debian-minimal.sh finish
 ```
+
+**Root-Subvolume:** Der Debian-Installer legt das Wurzeldateisystem auf btrfs
+immer im Subvolume `@rootfs` an und traegt es so in die fstab ein
+(`subvol=@rootfs`). Eine eigene Mount-Option wie `subvol=@root` laesst sich im
+d-i gar nicht eingeben — die Mount-Optionen sind dort eine feste Auswahlliste.
+`@rootfs` ist richtig so: Server und Agent erkennen das Root-Subvolume selbst
+(der Agent kennt `@rootfs`, `@root` und `@`), `finish` nennt das gefundene.
 
 **Tools-ISO-Pfad nach Boot ins installierte System:** die ThinForge-
 Cloning-VM haengt die Tools-ISO immer als zweites CD-ROM ein — sie ist
@@ -88,8 +97,10 @@ erhaelt LightDM-Autologin ohne Bildschirmsperre), und nicht benoetigte
 vorinstallierte Programme werden entfernt (`DistroTweaks/cleanup-debian.sh`).
 Am Ende bietet das Skript die Installation der VDI-Clients an
 (`DebianVDIClients/install-vdi-clients-debian.sh`). Per `su` statt `sudo`
-gestartet, richtet es sudo fuer das aufrufende Konto ein und startet sich
-darueber neu.
+gestartet, gibt es dem aufrufenden Konto voruebergehend sudo-Rechte und
+startet sich darueber neu. Am Ende nimmt es sie wieder zurueck: dauerhaft in
+der Gruppe `sudo` bleibt das Konto nur, wenn es in der Auswahl angehakt war
+oder schon vorher darin stand.
 
 `install-debian-minimal.sh` hat keinen `prepare`-Step: Das Layout entsteht
 in Schritt 0 ueber das UI, der netinst-d-i nutzt es direkt — kein Calamares-
@@ -106,7 +117,8 @@ Zwischenschritt noetig wie bei der Live-ISO-Variante.
 2. Im Dateimanager auf THINFORGE_TOOLS navigieren, Terminal oeffnen
 3. Vorbereiten:     sudo bash install-manjaro.sh prepare
 4. Calamares starten, Manuelle Partitionierung waehlen, Partition 2
-   mit Mount-Option subvol=@root als / zuweisen
+   als / (btrfs) zuweisen — keine Mount-Option: das Subvolume @root
+   legt Calamares dank prepare (mount.conf) selbst an
 5. Ins neue System booten
 6. Im Dateimanager auf THINFORGE_TOOLS navigieren, Terminal oeffnen
 7. Abschliessen:    sudo bash install-manjaro.sh finish
@@ -130,7 +142,7 @@ Truth, Calamares meldet sich von selbst, falls die Partitionen nicht passen.
 | GRUB | 2s Timeout, Snapshot-Menue sichtbar |
 | grub-btrfs | Snapshots als Boot-Eintraege |
 | Data-Partition | `advanced/create-data-partition.sh`: Partition 3 aus Schritt 0 als `/data` (Subvolume `@data`) einhaengen und in fstab eintragen, fehlt sie, aus dem freien Platz am Ende der Disk anlegen; ohne `/data` bricht `finish` ab |
-| Pakete | nfs-utils, zstd, curl, jq, python, xorg-xdpyinfo, minisign, zenity, yad |
+| Pakete | nfs-utils, zstd, curl, jq, tpm2-tools, python, xorg-xdpyinfo, minisign, zenity, yad |
 | NetBird-Agent | wie bei Debian: offizielles Installationsskript, Relay-Zwang und IPv6-aus, Dienst deaktiviert und gestoppt, Zustand unter `/data/netbird` |
 | SSH | Key-only Auth, Root per Key |
 | Agent | ThinForge Agent + Delta-Update-Service. Das Agent-Binary wird vorher mit `minisign` gegen seine Signatur und den Signierschluessel des Servers geprueft; passt sie nicht, bricht `finish` ab (siehe unten) |
@@ -194,6 +206,11 @@ THINFORGE_TOOLS/
 ├── ANLEITUNG_DE.md
 ├── INSTRUCTIONS_EN.md
 ├── tf-wall.png
+│   (die folgenden vier legt der Server beim ISO-Bau dazu)
+├── LICENSE                    Lizenztext (GPL-3.0)
+├── NOTICE                     Urheber und Lizenzhinweis
+├── THIRD_PARTY_LICENSES.md    Drittkomponenten
+├── WRITTEN_OFFER.md           Angebot des Quelltexts
 ├── DistroTweaks/
 │   ├── branding-common.sh
 │   ├── cleanup-debian.sh

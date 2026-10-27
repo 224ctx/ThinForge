@@ -49,7 +49,7 @@ Afterwards the client starts from its freshly written disk (post-deploy action "
 ## Step 5 — Verify
 
 - **Terminal** on the client ([03](../03-clients.md#terminal-web-ssh)): `hostname`, `df -h`, `systemctl status thinforge-agent`
-- If VPN is in use: menu **VPN → Clients**, the device's row should show "active" and "connected", the last handshake should be < 2 min ago
+- If VPN is in use: menu **VPN → Clients**, the device's row should show "active" and "connected", the last handshake should be < 2 min ago ([13](../13-vpn.md))
 
 ## Pitfalls
 

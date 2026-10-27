@@ -13,7 +13,7 @@ The view has several tabs. The most important ones for the image lifecycle are *
 2. Upload/download an ISO, boot the cloning VM with it
        ↓
 3. Install OS → for the restart: stop the VM, check the ISO is no
-   longer selected, start the VM → install the agent, customise
+   longer selected, start the VM → install the agent, customize
        ↓
 4. Save the baseline ("Save update delta & create clone", in
    baseline mode the first time) → image (v2026.06.22-001)
@@ -35,9 +35,10 @@ The cloning VM is a QEMU/KVM instance running on the server. It has a dedicated 
 A chip in the header of the **Create VM** card shows the state:
 
 - **Running** (green) — VM running
-- **Stopped** (grey) — not started
+- **Shutting down** (orange) — "Stop VM" is in progress, the guest system is shutting down
+- **Stopped** (gray) — not started
 
-There is no separate transitional state; while starting or stopping, the respective button spins. The console only appears once the screen transfer responds — until then it shows "Preparing console".
+While starting, the button spins; while stopping, the chip reads "Shutting down" until the VM is off. The console only appears once the screen transfer responds — until then it shows "Preparing console".
 
 ### Create base HD
 
@@ -61,11 +62,15 @@ After 10–30 seconds the VM is bootable, the console becomes active.
 
 ### Stopping
 
-- **"Stop VM"** — ends the VM immediately without shutting down the guest system. Shut the system down in the console first so that no unclean disk state gets saved
+- **"Stop VM"** — shuts the guest system down cleanly: ThinForge presses the VM's power button and waits up to 2 minutes for it to switch itself off. Meanwhile the button stays disabled and a notice appears above the buttons. Afterwards ThinForge reports "shut down cleanly" — or "stopped hard" if the guest system did not react (for instance in the installer, in the firmware menu or with an open "Shut down?" dialog without countdown); that is like a power cut, unwritten data is lost. Until the update of 2026-10-01 the button always ended the VM immediately.
+- To be on the safe side, shut the system down in the console yourself first and stop afterwards.
+- The clean shutdown needs the cloning-vm image from this update on; with an older one the stop reports "No QEMU monitor reachable" and halts the VM hard right away.
 
 ### Resources
 
 Defaults are 2 GB RAM (allowed 1–128 GB), 2 vCPUs (up to 24), a 60 GB disk and KVM acceleration on. You set RAM, CPUs and disk size per VM directly when starting it; the defaults are fixed in the server and cannot be configured. After a start or a restore the card takes over the values of the VM or the clone.
+
+If the server has no KVM (for example because it is itself a VM without nested virtualization), the VM still starts with KVM acceleration switched on — in software emulation (TCG), much slower. Since the update of 2026-10-08 the info card of the running VM then shows **"Unavailable (TCG)"** for KVM, with a notice; before, it showed "On" anyway.
 
 ---
 
@@ -90,11 +95,20 @@ Via the trash icon, after confirmation. ThinForge does not check whether the run
 
 ### Tools ISO
 
-The Tools ISO is built automatically by the server and is attached to the running cloning VM as a second CD drive (`THINFORGE_TOOLS`). It contains the setup scripts including client provisioning and the agent; with them you set up the agent in the image system before you save the image ([workflows/golden-image.md](workflows/golden-image.md)). Clients then receive the finished image via deployment.
+The Tools ISO is built automatically by the server and is attached to the running cloning VM as a second CD drive (`THINFORGE_TOOLS`). It contains the setup scripts including client provisioning and the agent; with them you set up the agent in the image system before you save the image ([workflows/golden-image.md](workflows/golden-image.md)). Clients then receive the finished image via deployment. Its root also holds the license texts (`LICENSE`, `NOTICE`, `THIRD_PARTY_LICENSES.md`, `WRITTEN_OFFER.md`) — the agent is licensed GPL-3.0-or-later.
 
-The Tools ISO is rebuilt automatically every time the cloning VM starts, and also after every agent build or upload under **Clients → Agent**. So after a certificate renewal or key rotation, you simply restart the VM.
+The Tools ISO is rebuilt automatically every time the cloning VM starts, and also after every agent build or upload under **Clients → Agent**. The VM only starts with the freshly built ISO: if the rebuild fails, it does not start, and the message names the reason. So after a certificate renewal or key rotation, you simply restart the VM.
 
-The ISO carries the server's agent binary together with its signature. If the server has no built or no signed agent binary, no ISO is built and the cloning VM does not start; the message names the missing step (build or **Sign** under **Clients → Agent**). During setup the provisioning script checks the signature and only installs a correctly signed agent.
+The ISO carries the server's agent binary together with its signature. If the server has no built or no signed agent binary, no ISO is built and the cloning VM does not start; the message names the missing step (build or **Sign** under **Clients → Agent**). Only an admin may sign or create a missing signing key; the message says so. During setup the provisioning script checks the signature and only installs a correctly signed agent.
+
+## Tab: VDI Clients
+
+This is where you store the installation packages of the VDI clients that ThinForge does not ship for licensing reasons: Citrix Workspace App, Citrix USB-Support (ctxusb), Parallels Client and Omnissa Horizon Client. Each client has exactly one slot; the table shows whether a package is present, with file, size and upload time.
+
+- **Upload** — Citrix, Citrix USB-Support and Parallels take a `.deb` file, Omnissa a `.bundle` or `.deb` file. The server stores the package under a fixed name; a new upload replaces the existing one.
+- **Delete** — via the trash icon, after confirmation.
+
+Uploaded packages are put on the Tools ISO the next time the cloning VM starts (folder `DebianVDIClients/`). At the end of `install-debian-minimal.sh finish` the script offers to install them in the image; to do it by hand, run `DebianVDIClients/install-vdi-clients-debian.sh` from the Tools ISO. Admins and operators may upload and delete.
 
 ---
 
@@ -146,7 +160,9 @@ The **Captures** tab, in contrast, captures the disk of a **physical client**: t
 4. **"Reboot the client now"** (on by default): a client reported online reboots into the capture via SSH right away, a powered-off one on its next power-on. Without the option you reboot it yourself.
 5. **"Start Capture"**
 
-The operation runs in the background; its state (Pending, Capturing, Done, Failed, Cancelled) is shown in the **Capture Jobs** list next to it. There a job can be cancelled, restarted or deleted. The finished capture appears in the **Clones** tab with source **HW Clone**; **"Import"** in the job list registers it under an image name (1–80 characters) as a deployable image, and the version is assigned automatically.
+The operation runs in the background; its state (Pending, Capturing, Done, Failed, Cancelled) is shown in the **Capture Jobs** list next to it. There a job can be cancelled, restarted or deleted; **Restart** prepares the device again and reboots it into the capture via SSH right away if it is reported online. The finished capture appears in the **Clones** tab with source **HW Clone**; **"Import"** in the job list registers it under an image name (1–80 characters) as a deployable image, and the version is assigned automatically.
+
+A device that is part of a running clone deployment cannot be captured — and a device with a running capture cannot be deployed. Either would overwrite the boot entry of the other operation; the interface reports it until that operation has finished or been cancelled.
 
 ---
 
@@ -179,17 +195,17 @@ The table shows per clone the version, source (**VM Clone** or **HW Clone**), na
 
 - **Reassign** — moves the clone to a different position in the tree (see below)
 - **Restore to VM** — writes the clone back onto the cloning VM (the VM must be stopped). This lets you switch back to an older version at any time. Make sure the clients end up on the older version too — either via a new deployment or via the rollback (which can only restore the immediately previous version).
-- **Export** — download as a 7z archive, optionally encrypted with a password (at least 4 characters). Unencrypted, credentials stored in the image are readable by anyone who gets the file.
-- **Delete** — shows the consequences first. Blocked while a running deployment uses the clone or an active rollout targets this version. If clients run this version you must confirm the impact; for the last clone of a chain the associated deltas can be deleted as well.
+- **Export** — download as a 7z archive, optionally encrypted with a password (at least 4 characters, ASCII characters only — no umlauts). Unencrypted, credentials stored in the image are readable by anyone who gets the file.
+- **Delete** — shows the consequences first. Blocked while a running deployment uses the clone or an active update assignment (**Updates** tab) targets this version. If clients run this version you must confirm the impact; for the last clone of a chain the associated deltas can be deleted as well.
 
-**"Import"** in the tab header uploads an exported 7z archive again (password only for an encrypted export). If the line name is already taken, the dialog asks for a new name.
+**"Import"** in the tab header uploads an exported 7z archive again (password only for an encrypted export); the clone keeps its version. If the line name is already taken, the dialog asks for a new name. During the import, the archive and the unpacked clone sit side by side on the server — so it needs roughly twice the archive size plus 2 GB of headroom. ThinForge checks this when the upload starts and again before unpacking; if there is not enough space, the import stops with a message stating the free and the required space, and nothing is left behind.
 
 ### Reassign / sort in
 
 Sometimes clones should be reordered in the tree — e.g. when a re-imported clone belongs at a different position, or when a parent-less clone should be threaded into an existing chain.
 
 - **"Assign as child"** — attaches the clone as the next child of a selected parent
-- **"Insert before clone"** — inserts the clone before an existing clone (only when a version number is recognisable in the name and the target version lies in the same root number range)
+- **"Insert before clone"** — inserts the clone before an existing clone. It is only offered when the name contains a version that precedes the target version: a date-based version such as `v2026.05.07-001` or an older number such as `v1.002`. Date-based versions only work within the same image line — the name consists of the line name and the version (e.g. "Manjaro v2026.05.07-001" before a clone of the line "Manjaro"), and the clone takes the line name afterwards. Older numbers need the same major number (`v1.…` before `v1.…`); the name stays.
 - **"Remove assignment"** — only for clones with a parent: removes the clone from its chain and turns it into a standalone new baseline
 
 These operations are **purely logical** — they only modify metadata, not the image itself. Delta generation still follows the physical snapshot chain from the capture moment.

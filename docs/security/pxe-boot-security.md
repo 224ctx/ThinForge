@@ -120,10 +120,16 @@ exportiert und auf die IPs der beteiligten Clients beschraenkt:
 
 ```
 # Waehrend Deployment (pro Client-IP):
-/nfs/clones  192.168.100.10(ro,sync,no_subtree_check,no_root_squash)
+/nfs/clones  192.168.100.10(ro,sync,no_subtree_check,root_squash)
 
 # Nach Deployment: kein Export
 ```
+
+`root_squash` seit 2026-09-30 (sec-dns-nfs.md P0-5): Root auf dem Client wird
+zu `nobody`, die Abbilder sind dafuer fuer „andere" lesbar (644/755, an jeder
+Uebernahmestelle nachgezogen). Nur die schreibende Aufnahme-Freigabe
+`/nfs/captures` behaelt `no_root_squash`, weil Clonezilla dort als Root
+schreibt.
 
 **Lifecycle**:
 1. `deployment_orchestrator::activate_clients()` → `nfs_service::enable_deploy_share(client_ips)`
@@ -153,6 +159,17 @@ Statt:
 ```
 http://{server}/deploy-scripts/bt-{deployment_id_prefix}/{partition}.torrent
 ```
+
+**Bekannte Grenze (Daisy 2026-09-30, bewusst so belassen):** Das Secret steht
+im per-MAC-Deploy-Skript, das ohne Zugangspruefung lesbar ist (naechster
+Absatz), und opentracker laeuft ohne Whitelist. Das ist kein Verlust gegenueber
+den anderen Wegen: ein Multicast-Deployment ist im selben Netz fuer jeden
+Teilnehmer ebenso mitlesbar, der Klon liegt per NFS/HTTP im selben Netz. Die
+tragende Annahme ist deshalb das **isolierte Rollout-Netz** — nicht das
+Geheimnis im Skript. Eine Ausgabe ueber einen IP-geprueften Endpunkt (wie beim
+`callback-token`) wurde geprueft und nicht gebaut; die Regel „im Deploy-Skript
+nichts Geheimes" (`docs/security/container-exposure.yaml`, dnsmasq) traegt den
+Hinweis auf diese Grenze.
 
 Das Secret steht im per-MAC-Deploy-Skript (`deploy-scripts/<mac>.sh`). Dieses
 Skript liegt im TFTP-Wurzelverzeichnis und ist dort — wie ueber Caddy:80 — ohne
@@ -205,15 +222,23 @@ wird der Aufruf ohne jede Aenderung quittiert):
   kein weiteres Deployment laeuft; der BitTorrent-Seeder stoppt, sobald kein
   BT-Deployment mehr aktiv ist
 
-### Completion-Timeout (entfallen)
+### Completion-Timeout (nur Multicast)
 
-Einen Zeitablauf, der Clients ohne `/done`-Callback als fehlgeschlagen markiert,
-gibt es seit 2026-06-12 nicht mehr: ein Deployment gilt erst als abgeschlossen,
-wenn alle Clients fertig sind. Der Worker schliesst nur Deployments ab, deren
-Clients bereits alle einen Endstatus haben, deren letzter `/done`-Callback aber
-verloren ging (`check_deployment_deadlines`, alle 5 Minuten). Der Wert
-`completion_timeout` der Multicast-Einstellungen wird noch gespeichert, aber
-nicht ausgewertet.
+Bei Unicast und BitTorrent gibt es keinen Zeitablauf, der Clients ohne
+`/done`-Callback als fehlgeschlagen markiert: ein Deployment gilt erst als
+abgeschlossen, wenn alle Clients fertig sind. Der Worker schliesst nur
+Deployments ab, deren Clients bereits alle einen Endstatus haben, deren letzter
+`/done`-Callback aber verloren ging (`check_deployment_deadlines`, alle 5
+Minuten).
+
+Multicast wertet `completion_timeout` seit 2026-09-30 wieder aus (vom
+2026-06-12 bis dahin nur gespeichert): das Ende des Senders setzt
+`completion_deadline` = jetzt + `completion_timeout`. Laeuft die Frist ab
+(`deployment_orchestrator::abschlussfristen_einloesen`, 30-s-Takt des Workers),
+gehen Geraete ohne `/done` auf `failed` und werden entwaffnet (PXE auf
+Local-Boot), das Deployment schliesst ab und raeumt Sender und NFS-Freigabe wie
+der letzte `/done`. So haelt ein haengendes Geraet den einzigen
+Multicast-Platz nicht mehr bis zum Abbruch fest.
 
 ---
 
@@ -273,4 +298,21 @@ Server (Seeder) ──Tracker──> Clients laden .torrent von HTTP
 | Torrent-Dateien | Zufaelliger Pfad | `bt_secret` (128 Bit) — steht im ohne Zugangspruefung lesbaren Deploy-Skript |
 | Callbacks | Token je Deployment-Client | `callback_token`-Validierung (403 bei Mismatch, F-CR-02); Herausgabe nur an die Geraeteadresse |
 | Double-Deploy | PXE-Selbstheilung bei /done | Idempotenter Localboot-Reset nach Abschluss |
-| Verwaiste Deployments | Abgleich im Worker | Abschluss, sobald alle Clients einen Endstatus haben (kein Zeitablauf) |
+| Verwaiste Deployments | Abgleich im Worker | Abschluss, sobald alle Clients einen Endstatus haben (Unicast/BitTorrent ohne Zeitablauf; Multicast zusaetzlich `completion_timeout` nach dem Sender-Ende) |
+
+---
+
+## Aenderungshistorie
+
+Nachgetragen am 2026-10-02 aus der Git-Historie der Datei (vorher `docs/pxe-boot-security.md`).
+
+| Datum | Aenderung |
+|---|---|
+| 2026-04-08 | Erste Fassung (aus dem Python-Projekt uebernommen): sechs Sicherheitsschichten vom Netzwerk-Boot bis zum Abschluss-Callback, Deployment-Modi, Sicherheitsmatrix. |
+| 2026-06-17 | Abgleich gegen den Rust-Code: Interface-Feld in `settings.dhcp_config`, GRUB-Pfad `grub/grub.cfg-<mac>`, NFS-Dienst `nfs_service.rs` und Orchestrator-Aufrufe (`activate_clients`, `check_and_disable_nfs`). |
+| 2026-07-13 | Nach `docs/security/` verschoben (Doku-Root in Themenverzeichnisse einsortiert). |
+| 2026-09-17 | Abgleich gegen den Code: kein Standard-Interface `ens19` (der Assistent waehlt es); Bindung von DHCP/TFTP, Multicast und Tracker, NFS-Server und EZIO-Seed-Port 6881 auf allen Interfaces; `clients.d`-Beispiel; NFS-Entzug je Client bei `/done`; `bt_secret` (128 Bit) im lesbaren Deploy-Skript; Callback-Token je Deployment-Client mit Herkunftspruefung; Completion-Timeout als entfallen (Abgleich `check_deployment_deadlines` im Worker). |
+| 2026-09-30 | §4: `/nfs/clones` exportiert mit `root_squash`, `/nfs/captures` behaelt `no_root_squash` (Clonezilla schreibt als Root) — `nfs_service::Freigabe` (sec-dns-nfs.md P0-5). |
+| 2026-09-30 | §5: `bt_secret` im Deploy-Skript als bekannte Grenze festgehalten — die tragende Annahme ist das isolierte Rollout-Netz, nicht das Geheimnis im Skript (Daisy 2026-09-30, Option b). |
+| 2026-10-02 | Diese Aenderungshistorie nachgetragen (Runde 6, T159); inhaltlich unveraendert. |
+| 2026-10-04 | Abgleich gegen den Code: §6 „Completion-Timeout" war als entfallen beschrieben — Multicast wertet `completion_timeout` seit 2026-09-30 wieder aus (`completion_deadline` ab Sender-Ende, `deployment_orchestrator::abschlussfristen_einloesen` im 30-s-Takt des Workers, stumme Geraete `failed` und entwaffnet); Sicherheitsmatrix entsprechend. Uebrige Schichten (dnsmasq-Direktiven, Boot-Dateien, NFS-Lebenszyklus, `bt_secret`, Rueckruf-Token) unveraendert gueltig. |

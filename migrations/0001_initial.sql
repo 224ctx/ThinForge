@@ -50,13 +50,32 @@ CREATE TYPE userrole AS ENUM ('admin', 'operator', 'viewer');
 -- Rollback-Task als defekt geflaggt wurden (siehe defective_versions
 -- für Delta-only Versionen).
 CREATE TYPE imagestatus AS ENUM ('ready', 'deprecated', 'defective');
+-- 'error' (clientstatus) und 'client_error' (alertcondition) werden seit
+-- 2026-10-01 nicht mehr vergeben und nicht mehr angezeigt (Runde 5, T474):
+-- den Geraete-Status 'error' setzte nie etwas, also feuerte auch die Regel
+-- 'client_error' nie. Die Werte bleiben im Typ (kein Umbau fuer tote Werte);
+-- der Code kennt sie nicht mehr, eine Altzeile mit 'error' stellt
+-- apply_consolidated_backfills auf 'offline'.
 CREATE TYPE clientstatus AS ENUM ('online', 'offline', 'cloning', 'error');
+-- 'heartbeat_rejected' (2026-10-08, Runde 7 F3: Alarm, solange der letzte
+-- Kontakt eines Geraets ein abgewiesener Heartbeat war) steht bewusst am Ende:
+-- Bestands-DBs bekommen den Wert in apply_consolidated_backfills per
+-- ADD VALUE, das hinten anhaengt — so gleichen sich frische und nachgezogene
+-- Datenbank auch in der Reihenfolge. Nicht zuruecknehmbar (Postgres kennt kein
+-- DROP VALUE, ein aelteres Backend liest Vorfallzeilen mit dem Wert nicht).
+-- 'agent_integrity' und 'agent_silent' (2026-10-21, Agent-Erkennungspaket:
+-- offene Agent-Ereignisse bzw. ein erreichbares Geraet ohne Heartbeat)
+-- ebenso am Ende, aus demselben Grund.
 CREATE TYPE alertcondition AS ENUM (
     'client_offline', 'cpu_high', 'ram_high', 'disk_high',
     'client_error', 'warranty_expiring', 'version_mismatch',
-    'mac_changed'
+    'mac_changed', 'heartbeat_rejected', 'agent_integrity', 'agent_silent'
 );
 CREATE TYPE incidentstatus AS ENUM ('active', 'acknowledged', 'resolved');
+-- 'paused' (clonedeploymentstatus) fuehrt der Code seit Runde 8 nicht mehr
+-- (Daisy 2026-10-08): gesetzt hat ihn nie etwas, fortsetzen konnte ihn nichts.
+-- Der Wert bleibt im Typ (kein Umbau fuer einen toten Wert, wie 'error' oben);
+-- eine Altzeile stellt apply_consolidated_backfills auf 'active'.
 CREATE TYPE clonedeploymentstatus AS ENUM (
     'scheduled', 'active', 'paused', 'completed', 'completed_with_errors', 'cancelled'
 );
@@ -67,9 +86,14 @@ CREATE TYPE updaterolloutclientstatus AS ENUM (
     'rolled_back', 'failed', 'signature_failed'
 );
 CREATE TYPE rollbacktaskstatus AS ENUM ('active', 'completed', 'aborted');
-CREATE TYPE rollbacktaskclientstatus AS ENUM ('pending', 'prepared', 'completed');
-CREATE TYPE rolloutstatus AS ENUM ('draft', 'active', 'paused', 'completed', 'cancelled');
-CREATE TYPE rolloutclientstatus AS ENUM ('pending', 'deploying', 'done', 'failed', 'cancelled');
+-- 'deviated' (2026-10-08, Runde 9, R9-R2): zurueckgerollt, aber nicht auf das
+-- beim Anlegen erwartete Ziel (rollback_task_clients.expected_version). Steht
+-- wie 'heartbeat_rejected' bei alertcondition bewusst am Ende — Bestands-DBs
+-- bekommen den Wert per ADD VALUE, das hinten anhaengt. Nicht zuruecknehmbar
+-- (kein DROP VALUE; ein aelteres Backend liest Zeilen mit dem Wert nicht).
+CREATE TYPE rollbacktaskclientstatus AS ENUM ('pending', 'prepared', 'completed', 'deviated');
+-- `rolloutstatus` und `rolloutclientstatus` (gestaffelte Rollouts) gibt es seit
+-- 2026-10-01 nicht mehr; Bestands-DBs verlieren sie im Backfill.
 
 -- ── 1. users ────────────────────────────────────────────────────────────────
 
@@ -268,6 +292,31 @@ CREATE TABLE scheduled_tasks (
 CREATE TABLE clients (
     id                       UUID         NOT NULL DEFAULT gen_random_uuid(),
     mac_address              VARCHAR(17)  NOT NULL,
+    -- Die MAC, die das Geraet im Heartbeat meldet, wenn sie von `mac_address`
+    -- abweicht (neue Netzwerkkarte; Runde 7, F4): nur eine gueltige,
+    -- normalisierte MAC. NULL, sobald die gemeldete wieder passt oder
+    -- `POST /clients/{id}/mac/accept` sie uebernommen hat.
+    reported_mac             VARCHAR(17),
+    -- Was der Agent zum Hostnamen auf seiner Datenpartition meldet (Runde 8,
+    -- H1): `stored_hostname` ist dieser Hostname, wie ihn der letzte volle
+    -- Heartbeat nannte (NULL = nie gemeldet); `mac_flag_at` steht, seit der
+    -- Agent das Flag `mac_changed` setzt (der gespeicherte Hostname stammt von
+    -- einer anderen MAC als der, mit der er sich meldet) und dieser Stand
+    -- nicht quittiert ist (H2, siehe unten), und faellt mit dem ersten vollen
+    -- Heartbeat ohne Flag. Ein leichter Heartbeat (waehrend eines Downloads)
+    -- sagt zu beidem nichts. Gelesen vom Alarm-Durchlauf (Bedingung
+    -- `mac_changed`).
+    stored_hostname          VARCHAR(255),
+    mac_flag_at              TIMESTAMPTZ,
+    -- Quittung des Agent-Flags (Runde 8, H2): fuer welche MAC und welchen
+    -- gespeicherten Hostnamen ein Admin den Stand bestaetigt hat — mit der
+    -- Uebernahme einer gemeldeten MAC oder der Bestaetigung der registrierten
+    -- (`POST /clients/{id}/mac/accept`). Meldet der Agent das Flag mit genau
+    -- diesem Paar, setzt der Heartbeat `mac_flag_at` nicht: nach einer
+    -- Uebernahme bleibt der Hostname `TF-<alte MAC>`, das Flag steht dann bei
+    -- jedem Heartbeat. Weicht die MAC oder der Hostname ab, gilt es wieder.
+    mac_flag_ack_mac         VARCHAR(17),
+    mac_flag_ack_hostname    VARCHAR(255),
     hostname                 VARCHAR(255) NOT NULL,
     inventarnummer           VARCHAR(100),
     raum                     VARCHAR(100),
@@ -301,7 +350,9 @@ CREATE TABLE clients (
     -- Geraet gilt danach als offline.
     agent_version            TEXT,
     vpn_connected            BOOLEAN      NOT NULL DEFAULT false,
-    vpn_ip                   INET,
+    -- `vpn_ip INET` stand hier bis Runde 6 (2026-10-02, T129): seit dem
+    -- NetBird-Cutover ohne Schreiber, seit Runde 5 ohne Leser; Bestands-DBs
+    -- verlieren die Spalte am Ende von apply_consolidated_backfills.
     connection_type          VARCHAR(20),
     is_lager                 BOOLEAN      NOT NULL DEFAULT false,
     installed_image          VARCHAR(255),
@@ -332,6 +383,32 @@ CREATE TABLE clients (
     -- Heartbeat-Ausgang war eine Ablehnung (kein Erfolg seither).
     last_heartbeat_rejected_at TIMESTAMPTZ,
     heartbeat_rejected_reason  TEXT,
+    -- Grundcode der Abweisung (Runde 9, thinforge_services::heartbeat_abweisung)
+    -- und die Angaben der Anfrage dazu (JSON-Objekt aus Texten: Gegenstelle,
+    -- reservierte IP, Rollout-Netz, gebundener Peer, Listener). Daraus baut die
+    -- Oberflaeche Chip und Tooltip in ihrer Sprache, der Alarm-Durchlauf das
+    -- englische Detail; NULL bei Altzeilen — dann gilt der Klartext daneben.
+    heartbeat_rejected_code    VARCHAR(40),
+    heartbeat_rejected_params  JSONB,
+    -- Stummes Geraet (Agent-Erkennungspaket, 2026-10-21): die Kehrschleife des
+    -- Workers stempelt `agent_silent_since`, wenn ein Geraet ohne Heartbeat
+    -- noch Ping beantwortet, `agent_silent_seen_at` je beantwortetem Ping und
+    -- zaehlt unbeantwortete in `agent_silent_misses` (bei 2 wieder ein
+    -- gewoehnliches Offline-Geraet). Ein angenommener Heartbeat leert alle drei.
+    agent_silent_since         TIMESTAMPTZ,
+    agent_silent_seen_at       TIMESTAMPTZ,
+    agent_silent_misses        SMALLINT     NOT NULL DEFAULT 0,
+    -- Agent-Haertung Paket 2 (2026-10-22, Spec §4.14):
+    -- `sudo_users`: Zahl der Nutzer mit root-Rechten auf dem Geraet, wie der
+    --   Agent sie im Heartbeat meldet (V18; NULL: nie gemeldet, Agent < v2.28.0);
+    -- `enrollment_window_until`: bis wann ein Heartbeat mit dem Install-Token
+    --   das Geraet anmelden darf (V19; NULL: kein offenes Fenster);
+    -- `integrity_checked_at`/`integrity_check_passed`: Stand der letzten
+    --   Integritaetspruefung per SSH (V4; NULL: nie geprueft).
+    sudo_users                 SMALLINT,
+    enrollment_window_until    TIMESTAMPTZ,
+    integrity_checked_at       TIMESTAMPTZ,
+    integrity_check_passed     BOOLEAN,
     created_at               TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at               TIMESTAMPTZ  NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
@@ -363,6 +440,10 @@ CREATE TABLE ssh_command_logs (
 );
 
 CREATE INDEX ix_ssh_command_logs_client_id ON ssh_command_logs (client_id);
+-- Zeitindex (seit 2026-10-10): die Aufbewahrung loescht stapelweise die
+-- aeltesten Zeilen vor dem Stichtag (`thinforge_services::verlauf_aufbewahrung`),
+-- der Aktivitaetsbericht liest Zeitraeume ueber `executed_at`.
+CREATE INDEX ix_ssh_command_logs_executed_at ON ssh_command_logs (executed_at);
 
 -- ── 12. client_task_templates ───────────────────────────────────────────────
 
@@ -402,7 +483,18 @@ CREATE TABLE client_tasks (
     dispatched_at TIMESTAMPTZ,
     started_at    TIMESTAMPTZ,
     finished_at   TIMESTAMPTZ,
+    -- Grund eines Scheiterns (bzw. eines Rueckzugs, Status 'cancelled'):
+    -- `error_msg` ist der Klartext — seit 2026-10-20 bei bekannten Fehlern
+    -- ein englischer Auffangtext samt Detail (fuer Altzeilen-Leser und das
+    -- Protokoll); `error_code` der stabile Code aus
+    -- thinforge_services::auftragsfehler, `error_params` die Angaben dazu
+    -- als JSON-Objekt (Schluessel = Platzhalter der Uebersetzung, `detail` =
+    -- unuebersetzte Rohausgabe). Die Oberflaeche uebersetzt den Code
+    -- (`tasks.errors.<code>`); NULL bei Altzeilen und Fehlern ohne Code —
+    -- dann gilt der Klartext.
     error_msg     TEXT,
+    error_code    VARCHAR(40),
+    error_params  JSONB,
     progress_pct  INTEGER               DEFAULT 0,
     task_metadata JSONB,
     template_id   UUID,
@@ -453,7 +545,15 @@ CREATE TABLE vpn_clients (
     vpn_connection          TEXT,
     vpn_last_handshake      TIMESTAMPTZ,
     vpn_apply_status        TEXT,
-    vpn_apply_error         TEXT,
+    -- Grund des letzten Fehlschlags als stabiler Code des Agenten (snake_case,
+    -- Katalog agent-go/internal/netbird/applyerror.go) plus Angaben als
+    -- JSON-Objekt aus Texten (Platzhalter der Oberflaechen-Uebersetzung,
+    -- `detail` = unuebersetzte Rohausgabe). Beide schreibt nur der Heartbeat
+    -- als Paar (persist_vpn_report). Bis Runde 16 (R16-V3) stand hier der
+    -- deutsche Freitext `vpn_apply_error`; Bestands-DBs verlieren ihn am Ende
+    -- von apply_consolidated_backfills.
+    vpn_apply_error_code    TEXT,
+    vpn_apply_error_params  JSONB,
     -- Drossel fuer den Enroll-Push im Heartbeat: der Auftrag ging bisher in
     -- JEDEM Tick raus (Default 10 s), und der Agent startet dabei den
     -- NetBird-Daemon neu — das riss den frisch aufgebauten Tunnel wieder ab,
@@ -471,25 +571,25 @@ CREATE TABLE vpn_clients (
     vpn_cloud_connected     BOOLEAN,
     vpn_cloud_seen_at       TIMESTAMPTZ,
     -- Absichts-Marker: gesetzt NUR von den Pfaden, die den Zugang wirklich
-    -- entziehen — `vpn::enrollment::deactivate_client` (ein Geraet) und
+    -- entziehen — `vpn::enrollment::deactivate_client` (ein Geraet),
     -- `vpn::firstconnect::nach_loeschung_aufraeumen` (die Flotte, nach dem
-    -- Loeschen der Instanz-Objekte). Kein buchhalterischer Pfad setzt ihn.
+    -- Loeschen der Instanz-Objekte; Peer- und Setup-Key-Zweig),
+    -- `handlers::clone_deployments::raeume_bindungen` (verwaiste Bindungen vor
+    -- einem Klon-Deployment ohne Zugangsdaten) und einmalig der
+    -- Migrator-Backfill fuer vor dem Marker deaktivierte Geraete. Kein
+    -- buchhalterischer Pfad setzt ihn.
     -- Aus ihm speist sich das `vpn_desired`-Feld der Heartbeat-Antwort.
     -- Bewusst eine eigene Spalte statt „keine Bindung mehr" — die Begruendung
     -- steht bei `handlers::clients::vpn_soll`.
     --
     -- REGEL: jeder Pfad, der `vpn_peer_id` auf einen Wert setzt, MUSS diese
-    -- Spalte im selben Statement auf NULL ziehen (heute: `enrollment`,
-    -- `firstconnect`, `backup`, zwei Stellen in `vpn::tick`). Wer wieder einen
-    -- Peer haelt, hat wieder Zugang; ein stehen gebliebener Marker liesse den
-    -- Server dem Geraet dauerhaft „aus" sagen, waehrend die Liste es als
-    -- aktiviert fuehrt.
+    -- Spalte im selben Statement auf NULL ziehen. Heute tut das genau EINE
+    -- Stelle, `vpn::enrollment::bind_peer` — ueber sie binden der Tick
+    -- (Erstbindung, Abschluss einer Neuanbindung), die Instanz-Uebernahme
+    -- (`firstconnect`) und der Import (`backup`). Wer wieder einen Peer haelt,
+    -- hat wieder Zugang; ein stehen gebliebener Marker liesse den Server dem
+    -- Geraet dauerhaft „aus" sagen, waehrend die Liste es als aktiviert fuehrt.
     vpn_deactivated_at      TIMESTAMPTZ,
-    -- ZTA-Hooks (v1 nullable / unused; populated in v2)
-    user_id                 UUID         REFERENCES users(id),
-    idp_subject             TEXT,
-    idp_groups              JSONB,
-    requires_login_after    TIMESTAMPTZ,
     PRIMARY KEY (id),
     UNIQUE (client_id),
     FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
@@ -522,6 +622,10 @@ CREATE TABLE dhcp_leases (
 );
 
 CREATE INDEX ix_dhcp_leases_mac_address ON dhcp_leases (mac_address);
+-- Zeitindex (seit 2026-10-10): die Aufbewahrung loescht stapelweise die am
+-- laengsten beendeten Leases vor dem Stichtag
+-- (`thinforge_services::verlauf_aufbewahrung`).
+CREATE INDEX ix_dhcp_leases_lease_end ON dhcp_leases (lease_end);
 
 -- ── 16. alert_incidents ─────────────────────────────────────────────────────
 
@@ -549,60 +653,45 @@ CREATE INDEX ix_alert_incidents_client_id ON alert_incidents (client_id);
 CREATE INDEX ix_alert_incidents_condition ON alert_incidents (condition);
 CREATE INDEX ix_alert_incidents_status    ON alert_incidents (status);
 
--- ── 17. rollouts ────────────────────────────────────────────────────────────
+-- ── 16a. client_agent_events (Agent-Erkennungspaket, 2026-10-21) ────────────
+-- Ereignisse des Agenten (`source = 'agent'`: abgelehnte Signaturen, fehlende
+-- Vertrauensanker, reparierte Units, gescheiterte Applys) und Soll-Abweichungen
+-- des Servers (`source = 'server'`: Binary, Signierschluessel, Agent-Version),
+-- Katalog `thinforge_services::agent_ereignis`. Eine OFFENE Zeile je Geraet,
+-- Code und Angaben: Wiederholungen erhoehen `count` und `last_seen_at`.
+-- `missed` zaehlt volle Heartbeats ohne diese Meldung (Zustaende schliessen
+-- bei 2, `closed_by = 'expiry'`), Ereignisse schliesst nur die Quittung
+-- (`closed_by` = Admin-Kennung) oder der Server nach einem Soll-Wechsel
+-- (`closed_by = 'server'`). `opens_incident = false` nur fuer die stille
+-- Unit-Drift direkt nach einem Abbild- oder Agentwechsel.
 
-CREATE TABLE rollouts (
-    id                      UUID           NOT NULL DEFAULT gen_random_uuid(),
-    name                    VARCHAR(255)   NOT NULL,
-    image_id                UUID           NOT NULL,
-    status                  rolloutstatus  NOT NULL DEFAULT 'draft',
-    stages                  JSONB          NOT NULL,
-    current_stage           INTEGER        NOT NULL DEFAULT 0,
-    deploy_method           VARCHAR(20)    NOT NULL DEFAULT 'pxe',
-    scope                   VARCHAR(20)    NOT NULL DEFAULT 'all',
-    gruppe_id               UUID,
-    total_eligible          INTEGER        NOT NULL DEFAULT 0,
-    halt_on_errors          BOOLEAN        NOT NULL DEFAULT true,
-    error_threshold_percent FLOAT          NOT NULL DEFAULT 20.0,
-    created_by              UUID,
-    started_at              TIMESTAMPTZ,
-    created_at              TIMESTAMPTZ    NOT NULL DEFAULT now(),
-    updated_at              TIMESTAMPTZ    NOT NULL DEFAULT now(),
+CREATE TABLE client_agent_events (
+    id             UUID         NOT NULL DEFAULT gen_random_uuid(),
+    client_id      UUID         NOT NULL,
+    source         VARCHAR(10)  NOT NULL CHECK (source IN ('agent', 'server')),
+    code           VARCHAR(40)  NOT NULL,
+    params         JSONB        NOT NULL DEFAULT '{}'::jsonb,
+    count          INTEGER      NOT NULL DEFAULT 1,
+    missed         SMALLINT     NOT NULL DEFAULT 0,
+    opens_incident BOOLEAN      NOT NULL DEFAULT true,
+    agent_at       TIMESTAMPTZ,
+    received_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    last_seen_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    closed_at      TIMESTAMPTZ,
+    closed_by      VARCHAR(40),
+    note           TEXT,
     PRIMARY KEY (id),
-    FOREIGN KEY (image_id) REFERENCES images (id) ON DELETE RESTRICT,
-    -- Bis zum 2026-09-05 stand `gruppe_id` ohne Fremdschluessel da: nach dem
-    -- Loeschen einer Gruppe zeigte die Spalte auf eine tote UUID, und der
-    -- Bediener bekam beim Start nur „No eligible clients" zu sehen.
-    -- SET NULL statt RESTRICT ist nur deshalb zulaessig, weil `launch_rollout`
-    -- einen Gruppen-Rollout ohne Gruppe seither fail-closed abweist
-    -- (`errors.rollouts.groupScopeGroupGone` — es wird KEIN Geraet gewaehlt) und
-    -- `delete_group` das Loeschen einer Gruppe mit nicht abgeschlossenem
-    -- Rollout schon vorher mit 409 verhindert.
-    FOREIGN KEY (gruppe_id) REFERENCES gruppen (id) ON DELETE SET NULL
+    FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE CASCADE
 );
 
--- ── 18. rollout_clients ─────────────────────────────────────────────────────
+CREATE INDEX ix_client_agent_events_offen ON client_agent_events (client_id) WHERE closed_at IS NULL;
 
-CREATE TABLE rollout_clients (
-    id                 UUID               NOT NULL DEFAULT gen_random_uuid(),
-    rollout_id         UUID               NOT NULL,
-    client_id          UUID               NOT NULL,
-    stage              INTEGER            NOT NULL,
-    status             rolloutclientstatus NOT NULL DEFAULT 'pending',
-    assigned_at        TIMESTAMPTZ        NOT NULL,
-    completed_at       TIMESTAMPTZ,
-    created_at         TIMESTAMPTZ        NOT NULL DEFAULT now(),
-    updated_at         TIMESTAMPTZ        NOT NULL DEFAULT now(),
-    PRIMARY KEY (id),
-    FOREIGN KEY (rollout_id) REFERENCES rollouts (id) ON DELETE CASCADE,
-    FOREIGN KEY (client_id)  REFERENCES clients  (id) ON DELETE CASCADE
-);
-
--- Ein Client darf pro Rollout nur EINMAL einer Stage zugeordnet sein. Verhindert
--- Duplikate, wenn launch_rollout nach einem partiellen Fehler erneut läuft
--- (Audit rollouts.rs:541); launch nutzt dazu ON CONFLICT DO NOTHING.
-CREATE UNIQUE INDEX ix_rollout_clients_rollout_client_uq
-    ON rollout_clients (rollout_id, client_id);
+-- ── 17./18. — entfallen ─────────────────────────────────────────────────────
+-- Hier standen `rollouts` und `rollout_clients` (gestaffelte Rollouts). Die
+-- Funktion ist seit 2026-10-01 entfernt (Daisy, Option A: Rollouts laufen
+-- ueber die Klon-Deployments); Bestands-DBs verlieren beide Tabellen im
+-- Backfill. Die Nummern bleiben, damit Verweise auf die uebrigen Abschnitte
+-- stimmen.
 
 -- ── 19. clone_deployments ───────────────────────────────────────────────────
 
@@ -634,16 +723,11 @@ CREATE TABLE clone_deployments (
     -- BitTorrent erst, wenn der Seeder die Torrents bereitgestellt hat.
     reboot_now                       BOOLEAN               NOT NULL DEFAULT true,
     maintenance_window_id            UUID,
-    -- Stage-Deployments von Image-Rollouts: activate_stage legt pro Stage ein
-    -- clone_deployment an, damit Callbacks/Safety-Net/NFS-Grant identisch zu
-    -- manuellen Deployments laufen; /done spiegelt darüber in rollout_clients.
-    rollout_id                       UUID,
     created_at                       TIMESTAMPTZ           NOT NULL DEFAULT now(),
     updated_at                       TIMESTAMPTZ           NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
     FOREIGN KEY (gruppe_id)             REFERENCES gruppen             (id) ON DELETE SET NULL,
-    FOREIGN KEY (maintenance_window_id) REFERENCES maintenance_windows (id) ON DELETE SET NULL,
-    FOREIGN KEY (rollout_id)            REFERENCES rollouts            (id) ON DELETE SET NULL
+    FOREIGN KEY (maintenance_window_id) REFERENCES maintenance_windows (id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_deployment_active ON clone_deployments (status) WHERE status = 'active';
@@ -834,6 +918,13 @@ CREATE TABLE rollback_task_clients (
     task_id   UUID                     NOT NULL,
     client_id UUID                     NOT NULL,
     status    rollbacktaskclientstatus NOT NULL DEFAULT 'pending',
+    -- Rollback-Ergebnis je Geraet (Runde 9, R9-R2): das Ziel, das der Server
+    -- beim Anlegen erwartet (das Ziel des Agenten, `rollback_ziel`), und die
+    -- Version, die das Geraet beim Abschluss meldete. Weichen sie ab, steht die
+    -- Zeile auf 'deviated'. NULL in `expected_version` = Zeile von vor Runde 9;
+    -- sie schliesst wie bisher ohne Pruefung ab.
+    expected_version VARCHAR(50),
+    reached_version  VARCHAR(50),
     created_at TIMESTAMPTZ             NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ             NOT NULL DEFAULT now(),
     PRIMARY KEY (id),
@@ -1007,6 +1098,8 @@ CREATE INDEX ix_managed_certificates_gruppe_id ON managed_certificates (gruppe_i
 --
 -- Tages-Snapshot der Flotten-Verfügbarkeit (Phase-3-Reporting). Eine Zeile pro
 -- Tag, befüllt vom scheduled_task 'fleet_daily_snapshot' (UPSERT auf snapshot_date).
+-- error_clients schreibt der Snapshot seit 2026-10-01 nicht mehr (Status
+-- 'error' entfallen, Runde 5, T474); die Spalte bleibt und traegt 0.
 CREATE TABLE fleet_daily (
     id               UUID             NOT NULL DEFAULT gen_random_uuid(),
     snapshot_date    DATE             NOT NULL,

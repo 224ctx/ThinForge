@@ -12,10 +12,12 @@ Solange noch keine Verbindung zur VPN-Instanz eingerichtet ist, zeigt die Ansich
 
 ### Voraussetzungen
 
-- **URL der VPN-Verwaltung** (z.B. `https://vpn.deinefirma.de`)
+- **URL der VPN-Verwaltung** (z.B. `https://teststellung01.thinforge.org`)
 - **Zugangs-Token** — der Schlüssel, den du nach Buchung der VPN-Option von thinforge.org erhältst.
 - Eine fertige Netzwerk-Konfiguration unter **Netzwerk → Lokales Netzwerk** (die Server-IP im Client-Netz wird für das VPN gebraucht).
-- Für das Aktivieren von Geräten: eine Lizenz mit freien VPN-Sitzplätzen ([11 — Lizenzierung](11-lizenz.md)).
+- Für das Aktivieren von Geräten: ein Abonnement mit freien VPN-Sitzplätzen ([11 — Abonnement](11-lizenz.md)).
+
+Welche Ports Server und Geräte dafür nach außen erreichen müssen (TCP 443 zum Host der VPN-Verwaltung, z. B. `teststellung01.thinforge.org`, mehr nicht), steht in [15 — Firewall-Regeln](15-firewall.md#vpn).
 
 > **Achtung:** Verwechsle das nicht mit einem *Aktivierungs-Schlüssel* (Setup-Key). Aktivierungs-Schlüssel sind gerätespezifisch und werden vom Backend automatisch erzeugt, wenn du einen VPN-Client aktivierst — du musst sie nie selbst eintragen.
 
@@ -32,7 +34,7 @@ Der Assistent läuft in fünf Schritten: **Verbindung → Bestand → Server reg
 | URL der VPN-Verwaltung | Vollständige Adresse mit `https://`-Prefix. Eine `http://`-Adresse wird angenommen, aber mit einem Warnhinweis: das Zugangs-Token ginge dann bei jedem Aufruf unverschlüsselt über das Netz. |
 | Zugangs-Token | Der Key aus der Buchung |
 
-Klick auf **„Verbindung testen & weiter"** speichert die Daten und prüft sie gegen die VPN-Instanz. Bei Erfolg wechselt der Assistent zu Schritt 2; bei einem Fehler steht die Meldung im Dialog („Die Instanz antwortet unter dieser Adresse nicht." oder „Die Instanz hat das Token abgelehnt."). Der Token wird nie wieder angezeigt — auch nicht maskiert.
+Klick auf **„Verbindung testen & weiter"** prüft die Daten gegen die VPN-Instanz und speichert sie danach; ein Token, das die Instanz zwar annimmt, das aber nicht alles lesen darf, was der Abgleich braucht (Gruppen, Regeln, DNS-Gruppen, Setup-Keys), wird abgewiesen und nicht gespeichert. Bei Erfolg wechselt der Assistent zu Schritt 2; bei einem Fehler steht die Meldung im Dialog („Die Instanz antwortet unter dieser Adresse nicht.", „Die Instanz hat das Token abgelehnt." — auch für ein Token, das die Instanz nicht oder nicht mehr kennt — oder „Unter dieser Adresse antwortet keine Management-API der VPN-Instanz …", wenn die URL auf das Dashboard statt auf die Management-API zeigt). Der Token wird nie wieder angezeigt — auch nicht maskiert.
 
 ### Schritt 2 — Bestand
 
@@ -68,20 +70,20 @@ Nach dem Setup zeigt die Ansicht oben zwei feste Bereiche:
 
 Darunter folgen vier Reiter:
 
-- **Clients**: die Geräte je Gruppe mit ihrem VPN-Status, Aktivieren und Deaktivieren (einzeln oder „Ganze Gruppe aktivieren"), dazu „Flotte neu enrollen" für den Wechsel auf eine andere VPN-Instanz.
+- **Clients**: die Geräte je Gruppe mit ihrem VPN-Status — meldet der Agent des Geräts einen anderen Zustand des ThinVPN-Dienstes („Fehler", „installiert, aus" oder „nicht installiert"), steht daneben ein kleiner Hinweis „Gerät meldet: …", den das Überfahren erklärt (seit dem Update vom 2026-10-07) —, Aktivieren und Deaktivieren (einzeln oder „Ganze Gruppe aktivieren"), dazu „Flotte neu enrollen" für den Wechsel auf eine andere VPN-Instanz.
 - **Freigaben**: die von dir angelegten Freigaben und darunter die festen Grundregeln (Baseline), die sich nicht ändern lassen.
 - **Zustand**: der Abgleich zwischen Soll und Ist mit „Prüfen" und „Jetzt anwenden", das Abgleichs-Protokoll und die Sicherung (Export/Import der Freigaben).
-- **Tasks**: die laufenden und abgeschlossenen VPN-Aufgaben.
+- **Tasks**: die laufenden und abgeschlossenen VPN-Aufgaben — je Zeile Client, Auftrag („VPN-Schlüssel einrichten", „VPN neu anmelden", „VPN-Config entfernen"), Status, Start- und Endzeit. Die Spalte „Fehler" ist nur bei fehlgeschlagenen Aufträgen gefüllt — seit dem Update vom 2026-10-20 in der Sprache der Oberfläche, die unübersetzte Rohmeldung des Servers dahinter; dort steht auch „Wiederholen". „Abgeschlossen" heißt hier: der Server hat seinen Teil erledigt — der Schlüssel geht mit dem nächsten Status-Abgleich ans Gerät bzw. der Zugang ist entzogen. Ob das Gerät angebunden ist, zeigt der Reiter **Clients**. (Bis zum Update vom 2026-10-20 stand bei erledigten Aufträgen ein deutscher Hinweis rot in der Spalte „Fehler" — das war kein Fehler.)
 
 > **„Verbindung lösen"** trennt diese ThinForge-Installation von der VPN-Instanz. Lokal fallen dabei die Freigaben samt Regeln und die dazugehörigen DNS-Einträge weg, und der VPN-Dienst dieses Servers wird dauerhaft stillgelegt. **Auf der VPN-Instanz bleibt alles stehen** — Regeln, Netzwerk und die Zugänge aller Geräte —, ist von ThinForge aus aber nicht mehr erreichbar und lässt sich nur noch dort entfernen. Wer die Freigaben behalten will, exportiert sie vorher im Reiter **Zustand**. Die Einrichtung beginnt danach wieder mit dem Assistenten.
 
-> **„Zugangsdaten neu eintragen"** öffnet den Assistenten erneut. Ein unverändertes Token lässt alles stehen; ein **anderes** Token setzt die Einrichtung auf „nicht übernommen" zurück — im Schritt Bestand dann **„Wiederherstellen"** wählen. Eine URL, die auf eine andere VPN-Instanz zeigt, wird abgewiesen, solange Freigaben an der bisherigen hängen: erst „Verbindung lösen", dann neu einrichten.
+> **„Zugangsdaten neu eintragen"** öffnet den Assistenten erneut. Ein unverändertes Token lässt alles stehen. Ein **anderes** Token wird vor dem Speichern gegen die VPN-Instanz geprüft: Trägt sie die Kennung dieser Installation, bleibt die Einrichtung stehen, und der Assistent schließt mit „Einrichtung blieb erhalten" ab; gehört das Token zu einer anderen Instanz oder lässt sich das nicht prüfen (Instanz nicht erreichbar, Token abgelehnt), fällt die Einrichtung auf „nicht übernommen" zurück — im Schritt Bestand dann **„Wiederherstellen"** wählen. Ein Token, das die VPN-Instanz zwar annimmt, das aber nicht alles lesen darf, was der Abgleich braucht (Gruppen, Regeln, DNS-Gruppen, Setup-Keys), weist ThinForge beim Speichern ab — es bleibt beim bisherigen Token. Eine URL, die auf eine andere VPN-Instanz zeigt, wird abgewiesen, solange Freigaben an der bisherigen hängen: erst „Verbindung lösen", dann neu einrichten.
 
 Sobald die Verbindung eingerichtet ist, lösen interne Namen (z.B. `thinforge-server` oder Hosts der lokalen Domain) auf den Endgeräten automatisch über den Tunnel auf. Voraussetzung ist eine gesetzte lokale Domain unter **Netzwerk → DNS** (Abschnitt „Lokale Domain", Feld „Domain-Name", siehe [07 — Netzwerk](07-netzwerk.md)).
 
 ## Clients und Freigaben konfigurieren
 
-Im Reiter **Clients** sind die Geräte nach der ThinForge-Gruppe gegliedert, der sie angehören; angezeigt werden die Gruppen mit gesetztem VPN-Haken ([04 — Gruppen](04-gruppen.md)) und zusätzlich jedes Gerät, das noch einen VPN-Zugang hält. Eigene VPN-Gruppen gibt es nicht: alle aktivierten Geräte gehören zur festen Gruppe „Clients", und über die Freigaben entscheidet sich, was sie erreichen dürfen.
+Im Reiter **Clients** sind die Geräte nach der ThinForge-Gruppe gegliedert, der sie angehören; angezeigt werden die Gruppen mit gesetztem VPN-Haken ([04 — Gruppen](04-gruppen.md)) und zusätzlich jedes Gerät, das noch einen VPN-Zugang hält. Eigene VPN-Gruppen gibt es nicht: alle aktivierten Geräte gehören zur festen Gruppe „Clients", und über die Freigaben entscheidet sich, was sie erreichen dürfen. Welche Geräte einen VPN-Zugang halten, zeigt auch die Geräteliste (Spalte „VPN" mit Schild-Symbol, Filter „VPN aktiviert", siehe [03 — Clients](03-clients.md)).
 
 Die eigentlichen **Freigaben** legst du im Reiter **Freigaben** über **„Neue Freigabe"** an. Ein Assistent führt in vier Schritten — **Ziel → Zugriff → Vorschau → Anwenden & prüfen**:
 
@@ -97,7 +99,7 @@ Die **Vorschau** zeigt, welche Objekte auf der VPN-Instanz entstehen; **„Anwen
 
 ## VPN für ein Endgerät aktivieren
 
-Im Reiter **Clients** den gewünschten Client suchen, in der Aktions-Spalte auf **„Aktivieren"** klicken. ThinForge prüft den Lizenz-Sitzplatz, erzeugt einen Aktivierungs-Schlüssel und sendet ihn beim nächsten Status-Abgleich ans Endgerät. Solange der Auftrag noch nicht abgeholt ist, steht in der Zeile „Aktivierung ausstehend", danach „wartet auf Erstverbindung"; sobald der Client sich angemeldet hat, wechselt der Status auf **„aktiv"**.
+Im Reiter **Clients** den gewünschten Client suchen, in der Aktions-Spalte auf **„Aktivieren"** klicken. ThinForge prüft, ob im Abonnement ein Sitzplatz frei ist, erzeugt einen Aktivierungs-Schlüssel und sendet ihn beim nächsten Status-Abgleich ans Endgerät. Solange der Auftrag noch nicht abgeholt ist, steht in der Zeile „Aktivierung ausstehend", danach „wartet auf Erstverbindung"; sobald der Client sich angemeldet hat, wechselt der Status auf **„aktiv"**.
 
 Wichtig: Der Aktivierungs-Schlüssel **läuft nicht ab**. Du kannst Geräte schon einmal vorbereiten, auch wenn sie erst Wochen später ins Homeoffice gehen.
 
@@ -107,9 +109,11 @@ Danach baut der Client den Tunnel **vollautomatisch** auf, sobald das Gerät die
 
 ## VPN für ein Endgerät deaktivieren
 
-In der Tabelle auf **„Deaktivieren"** klicken — Bestätigungsdialog erscheint. Bei Bestätigung wird der Zugang des Geräts auf der VPN-Instanz sofort entfernt; das Gerät legt seinen VPN-Dienst beim nächsten Status-Abgleich still und löscht die lokalen Anmeldedaten. Der Lizenz-Sitzplatz wird frei.
+In der Tabelle auf **„Deaktivieren"** klicken — Bestätigungsdialog erscheint. Bei Bestätigung wird der Zugang des Geräts auf der VPN-Instanz sofort entfernt; das Gerät legt seinen VPN-Dienst beim nächsten Status-Abgleich still und löscht die lokalen Anmeldedaten. Der Sitzplatz im Abonnement wird frei.
 
 Eine erneute Aktivierung ist jederzeit möglich (erstellt einen neuen Aktivierungs-Schlüssel).
+
+> **Geräte, die den Server nur über das VPN erreichen** — etwa an einem Standort ohne Verbindung ins lokale Netz des ThinForge-Servers; der Server erkennt das daran, dass das letzte Lebenszeichen des Geräts durch den VPN-Tunnel kam: Mit dem Deaktivieren verliert ein solches Gerät auch seinen einzigen Weg zum ThinForge-Server. Eine erneute Aktivierung kommt über den Status-Abgleich und erreicht das Gerät erst wieder, wenn es im lokalen Netz des Servers steht — es ist also **nur vor Ort neu anzubinden**. Der Bestätigungsdialog warnt in diesem Fall ausdrücklich und verlangt ein zusätzliches Häkchen; ohne das Häkchen lehnt der Server das Deaktivieren ab und ändert nichts. Für ein verlorenes Gerät bleibt das Deaktivieren (mit Häkchen) der richtige Weg — der Zugang ist danach sofort entzogen.
 
 ## FAQ
 
@@ -125,14 +129,17 @@ Ja, die Aktivierungen laufen unabhängig voneinander; „Ganze Gruppe aktivieren
 **Was passiert, wenn die VPN-Instanz kurz nicht erreichbar ist?**
 Bereits aktive VPN-Verbindungen laufen weiter. Neue Aktivierungen und der Abgleich sind erst möglich, wenn die VPN-Instanz wieder antwortet; die Status-Leiste meldet solange „VPN-Verwaltung nicht erreichbar".
 
-**Warum sehe ich „VPN-Lizenz-Limit erreicht"?**
-Deine Lizenz erlaubt nur eine bestimmte Anzahl aktivierter Clients (VPN-Sitzplätze). Lösung: einen nicht mehr benötigten Client deaktivieren oder eine Lizenz mit mehr Sitzplätzen einspielen ([11 — Lizenzierung](11-lizenz.md)).
+**Warum sehe ich „Limit des VPN-Abonnements erreicht"?**
+Dein Abonnement erlaubt nur eine bestimmte Anzahl aktivierter Clients (VPN-Sitzplätze). Lösung: einen nicht mehr benötigten Client deaktivieren oder eine Abonnementdatei mit mehr Sitzplätzen einspielen ([11 — Abonnement](11-lizenz.md)). „Ganze Gruppe aktivieren" bricht am ersten Gerät ohne freien Sitzplatz ab; die bis dahin aktivierten Geräte bleiben aktiviert.
+
+**Was bedeutet „Gerät meldet: …" neben dem Status?**
+Der Status selbst ist der von ThinForge abgeleitete Zustand (aktiviert? von der VPN-Instanz als verbunden geführt?). Der kleine Hinweis daneben ist die Meldung des Agenten über den ThinVPN-Dienst auf dem Gerät: „installiert, aus" heißt, der ThinVPN-Client ist vorhanden, läuft aber nicht — bei deaktivierten Geräten normal; „nicht installiert" (nur bei aktivierten Geräten) heißt, das Paket `netbird` fehlt auf dem Gerät, es muss nachinstalliert oder das Gerät mit einem passenden Image bespielt werden; „Fehler" heißt, der Agent konnte den ThinVPN-Dienst nicht abfragen — dann auf dem Gerät im Journal des Agenten nachsehen. Das Überfahren zeigt die Erklärung.
 
 **Was passiert beim Neu-Klonen eines aktivierten Geräts?**
 Das Deployment setzt die VPN-Zuordnung selbst zurück und stellt einen frischen Aktivierungs-Schlüssel aus — das Gerät meldet sich nach dem Klon von selbst wieder an. Ist die Verbindung zur VPN-Instanz gelöst, geht das nicht; der Warndialog vor dem Deployment sagt das an ([06 — Rollouts](06-rollouts.md#rollouts-und-vpn)).
 
 ## Weiterführende Doku
 
-- Lizenz und VPN-Sitzplätze: [11 — Lizenzierung](11-lizenz.md)
+- Abonnement und VPN-Sitzplätze: [11 — Abonnement](11-lizenz.md)
 - Lokale Domain und DNS: [07 — Netzwerk](07-netzwerk.md)
 - Rollouts, Delta-Updates und VPN: [06 — Rollouts](06-rollouts.md#rollouts-und-vpn)

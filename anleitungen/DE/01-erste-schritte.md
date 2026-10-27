@@ -2,7 +2,7 @@
 
 ## Installation
 
-ThinForge läuft als Docker-Stack auf einem Server im lokalen Netz (Debian oder Ubuntu). Die Installation erledigt ein Bootstrap-Skript, das einmalig auf dem frischen Server ausgeführt wird:
+ThinForge läuft als Docker-Stack auf einem Server im lokalen Netz (empfohlen und getestet: Ubuntu Server 24.04 LTS). Die Installation erledigt ein Bootstrap-Skript, das einmalig auf dem frischen Server ausgeführt wird:
 
 ```bash
 ./bootstrap-release.sh
@@ -10,7 +10,7 @@ ThinForge läuft als Docker-Stack auf einem Server im lokalen Netz (Debian oder 
 
 Es lädt die ThinForge-Komponenten, richtet die Grundkonfiguration samt automatisch erzeugter Zugangs-Geheimnisse ein (kein manuelles Bearbeiten der `.env` nötig) und startet den kompletten Stack. Danach ist die Web-Oberfläche unter der Server-Adresse erreichbar.
 
-> **Hinweis:** Das Bootstrap-Skript liegt im öffentlichen ThinForge-Release-Repository; Repository und Container-Registry sind ohne Zugangsdaten lesbar. `git` muss auf dem Server vorhanden sein; alle weiteren Abhängigkeiten installiert das Skript selbst.
+> **Hinweis:** Das Bootstrap-Skript liegt im öffentlichen ThinForge-Release-Repository; Repository und Container-Registry sind ohne Zugangsdaten lesbar. `git` muss auf dem Server vorhanden sein; alle weiteren Abhängigkeiten installiert das Skript selbst. Auf Debian gilt das nicht für Docker: das Skript bindet die Docker-Paketquelle für Ubuntu ein, Docker samt Compose-Plugin muss dort vorher von Hand installiert sein.
 
 ## Server-Adresse aufrufen
 
@@ -26,8 +26,8 @@ Beim allerersten Aufruf nach einer frischen Installation erscheint der **Setup-W
 
 1. **Admin-Konto anlegen** — Benutzername, E-Mail, Passwort. Das ist der erste Admin-Account; weitere Benutzer werden später in den Einstellungen hinzugefügt.
 2. **Server-Identität** — Hostname und lokale Domain für dnsmasq.
-3. **DHCP / PXE** — Management-Interface mit Upstream-DNS, Rollout-Interface mit fester IP sowie der DHCP-Modus (eigener DHCP-Server mit IP-Bereich oder Proxy-DHCP neben einem vorhandenen). Wird für das Booten neuer Thin-Clients gebraucht.
-4. **NTP** — Upstream-Zeitserver des Servers (vorbelegt mit dem Standard-Gateway) und der NTP-Server, den die Clients per DHCP erhalten (vorbelegt mit der Rollout-IP, sonst `0.pool.ntp.org`). Eine Zeitzone fragt der Wizard nicht ab — es gilt `Europe/Berlin`, änderbar unter [09 — Einstellungen → Zeitzone](09-einstellungen.md#zeitzone).
+3. **DHCP / PXE** — Management-Interface mit Upstream-DNS, Rollout-Interface mit fester IP sowie der DHCP-Modus (eigener DHCP-Server mit IP-Bereich; Proxy-DHCP neben einem vorhandenen ist seit 2026-09-30 bis zur Klärung gesperrt). Wird für das Booten neuer Thin-Clients gebraucht.
+4. **NTP** — Upstream-Zeitserver des Servers (vorbelegt mit dem Standard-Gateway) und der NTP-Server, den die Clients per DHCP erhalten (vorbelegt mit der Rollout-IP, sonst `0.pool.ntp.org`). Dazu die **Zeitzone** des Betriebs (vorbelegt mit `Europe/Berlin`), später änderbar unter [09 — Einstellungen → Zeitzone](09-einstellungen.md#zeitzone).
 5. **HTTPS / TLS** — ein selbst-signiertes Zertifikat wird angelegt.
 6. **Zusammenfassung** — alle Eingaben prüfen und abschließen.
 
@@ -37,9 +37,11 @@ Nach dem Abschluss leitet der Wizard nach 15 Sekunden auf die **Anmeldeseite** w
 
 ## Anmelden
 
-Nach dem Setup meldet man sich mit den eben angelegten Admin-Zugangsdaten an. Weitere Operator- und Viewer-Konten entstehen in [09 — Einstellungen → Benutzer](09-einstellungen.md#tab-benutzer--rollen).
+Nach dem Setup meldet man sich mit den eben angelegten Admin-Zugangsdaten an. Weitere Operator- und Betrachter-Konten entstehen in [09 — Einstellungen → Benutzer](09-einstellungen.md#tab-benutzer--rollen).
 
-**Passwort vergessen?** Der E-Mail-Versand eines Reset-Links ist derzeit noch nicht verfügbar. Eine andere Admin-Person setzt das Passwort daher in [09 — Einstellungen → Benutzer](09-einstellungen.md#tab-benutzer--rollen) neu.
+**Passwort vergessen?** Ist unter Einstellungen → Benachrichtigungen der E-Mail-Kanal eingerichtet, zeigt der Login-Bildschirm den Link **Passwort vergessen?**; er schickt einen 15 Minuten gültigen Einmal-Link an die Adresse des Kontos ([10 — Profil & 2FA](10-profil-und-2fa.md#passwort-vergessen)). Ohne Mailversand setzt eine andere Admin-Person das Passwort in [09 — Einstellungen → Benutzer](09-einstellungen.md#tab-benutzer--rollen) neu.
+
+**Zu viele Anfragen?** Anmelden, Abmelden und „Passwort vergessen?" teilen sich eine Bremse: je Absenderadresse 20 Anfragen am Stück, danach eine alle 5 Sekunden. Darüber meldet die Seite „Zu viele Anfragen (HTTP 429) — bitte kurz warten und erneut versuchen."; nach ein paar Sekunden geht es weiter.
 
 ## UI-Tour
 
@@ -66,7 +68,7 @@ Das Fenster ist in drei Bereiche geteilt:
 
 ### Sidebar (links)
 
-Bis auf **Logs** (nur für Admins) ist die Sidebar für alle Rollen gleich — sie zeigt also auch Bereiche, in denen die eigene Rolle nur lesen darf. Was eine Rolle tatsächlich ändern darf, steht in der [Rollenübersicht](README.md#rollen-im-system). Als Operator sichtbar:
+Die Hauptbereiche der Sidebar sind bis auf **Logs** (nur für Admins) für alle Rollen gleich — sie zeigt also auch Bereiche, in denen die eigene Rolle nur lesen darf. Einzelne Unterpunkte hängen an der Rolle: **Ersteinrichtung** und **Wartungsfenster** sehen Admin und Operator, **Benutzer**, **Abonnement** und **Werkeinstellungen** unter Einstellungen nur Admins. Was eine Rolle tatsächlich ändern darf, steht in der [Rollenübersicht](README.md#rollen-im-system). Als Operator sichtbar:
 
 - **Dashboard** — Übersicht ([02](02-dashboard.md)); der Unterpunkt **Ersteinrichtung** öffnet einen kurzen Assistenten für erste Gruppe, ersten Client und den Clonezilla-Download
 - **Clients** — Geräteverwaltung mit den Unterpunkten Clients, Garantie, Agent und Zertifikate ([03](03-clients.md))
@@ -76,9 +78,9 @@ Bis auf **Logs** (nur für Admins) ist die Sidebar für alle Rollen gleich — s
 - **Netzwerk** — Infrastruktur-Einstellungen ([07](07-netzwerk.md))
 - **Tasks** — laufende und historische Aufträge sowie geplante Aufgaben ([08](08-tasks-logs.md))
 - **Berichte** — Auswertungen und Exporte
-- **Einstellungen** — Dienste, Config, Benutzer ([09](09-einstellungen.md))
+- **Einstellungen** — Allgemein, Dienste, Benachrichtigungen, Wartungsfenster, Sicherheit und Remote Desktop ([09](09-einstellungen.md))
 - **Logs** — Audit-Log und Container-Logs, nur für Admins ([08](08-tasks-logs.md))
-- **Info & Backup** — Systeminfo, Backup & Restore und die Lizenztexte
+- **Info & Backup** — Systeminfo, Backup & Restore (nur für Admins) und die Lizenztexte
 
 ### Hauptfläche (rechts)
 

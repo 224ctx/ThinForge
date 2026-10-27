@@ -39,7 +39,10 @@ Third-party components:
     and permissively-licensed packages from the Alpine Linux
     repositories (e.g. qemu, btrfs-progs, dnsmasq, grub, parted,
     coreutils, bash, wget, ntfs-3g, udpcast, libtorrent-rasterbar).
-    See THIRD_PARTY_LICENSES.md for the authoritative list.
+    ThinForge distributes these packages inside its images; the
+    written offer in WRITTEN_OFFER.md covers every GPL- or
+    LGPL-licensed one. See THIRD_PARTY_LICENSES.md for the
+    authoritative list.
 
     ThinForge orchestrates but does not distribute:
       * Clonezilla Live — https://clonezilla.org/
@@ -72,8 +75,9 @@ Third-party components:
     frontend/package.json.
 
 For full licensing information, the texts of the GPL v2 and GPL v3,
-and a written offer for the corresponding source code of every GPL v2
-component (valid three years from the date of distribution), see:
+and a written offer for the corresponding source code of every GPL- or
+LGPL-licensed component, including the Alpine packages in the container
+images (valid three years from the date of distribution), see:
 
   LICENSE                   — GNU GPL v3 (ThinForge's license)
   THIRD_PARTY_LICENSES.md   — Summary of third-party licenses
@@ -82,8 +86,8 @@ component (valid three years from the date of distribution), see:
   LICENSES/*.md             — Per-component license metadata
   WRITTEN_OFFER.md          — GPL §3(b) written source offer
 
-Corresponding source of every GPL binary that ThinForge distributes
-is shipped in this release under `sources/`:
+Corresponding source of Partclone and EZIO is shipped in this release
+under `sources/` (for the Alpine packages, see WRITTEN_OFFER.md):
   sources/partclone-0.3.47.tar.gz  — Partclone source (current images)
   sources/ezio-2.0.30.tar.gz       — EZIO source (current images)
   sources/                         — plus the corresponding source for every

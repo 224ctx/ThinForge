@@ -4,7 +4,7 @@
 - **Copyright:** Steven Shiau and Clonezilla / NCHC Free Software Labs contributors
 - **Upstream:** https://clonezilla.org/ · https://github.com/stevenshiau/clonezilla
 - **Version distributed with ThinForge:** Clonezilla Live 3.3.1-35 (default; configurable via `CLONEZILLA_VERSION`)
-- **Source included in this repository:** `quellinfos/clonezilla/` (version 5.8.1, reference / unmodified upstream snapshot)
+- **Source:** not part of this repository — upstream publishes it with every release (see “Reference source” below)
 - **Clonezilla Live ISO origin:** https://sourceforge.net/projects/clonezilla/files/clonezilla_live_stable/
 
 ## How ThinForge uses Clonezilla
@@ -31,6 +31,6 @@ Accordingly, GPL v2 §3 source-with-binary obligations do not apply to ThinForge
 
 - Upstream release page: https://clonezilla.org/downloads.php
 - `clonezilla-live-<version>-src.iso` / `.tar.xz` archives accompany every binary release upstream.
-- Full GPL v2 text shipped in [`GPL-2.0.txt`](GPL-2.0.txt) and in `quellinfos/clonezilla/LICENSE`.
+- Full GPL v2 text shipped in [`GPL-2.0.txt`](GPL-2.0.txt).
 
-The ThinForge source repository historically included a reference snapshot of the Clonezilla 5.8.x source tree under `quellinfos/clonezilla/` for developer reference. That snapshot is not a formal source offer (we are not the distributor) and may be pruned from future releases of the source repository without affecting compliance.
+The ThinForge source repository historically carried a reference snapshot of the Clonezilla 5.8.x source tree under `quellinfos/clonezilla/` for developer reference. It was removed from the repository on 2026-04-25; it never was a formal source offer (we are not the distributor), so its removal does not affect compliance.
